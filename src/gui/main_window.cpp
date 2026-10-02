@@ -646,7 +646,7 @@ void CaseWorkspace::show_record(const QString& section, const QString& object_ty
 void MainWindow::rebuild_pages() {
     while (content_->count() > 0) { auto* widget = content_->widget(0); content_->removeWidget(widget); delete widget; }
     workspace_ = nullptr; cases_page_ = nullptr; playbooks_page_ = nullptr; settings_page_ = nullptr;
-    cases_page_ = new CasesPage(*context_, this); playbooks_page_ = new PlaybooksPage(*context_, this); settings_page_ = new SettingsPage(*context_, this); content_->addWidget(cases_page_); content_->addWidget(scroll_page(playbooks_page_)); content_->addWidget(scroll_page(settings_page_));
+    cases_page_ = new CasesPage(*context_, this); playbooks_page_ = new PlaybooksPage(*context_, this); settings_page_ = new SettingsPage(*context_, this); content_->addWidget(scroll_page(cases_page_)); content_->addWidget(scroll_page(playbooks_page_)); content_->addWidget(scroll_page(settings_page_));
     cases_page_->on_open_case = [this](const domain::Id& id) { open_case(id); };
     settings_page_->on_data_directory_requested = [this](const std::filesystem::path& path) { reload_data_directory(path); };
     settings_page_->on_navigation_glow_changed = [this](bool enabled) {

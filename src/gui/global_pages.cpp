@@ -268,9 +268,8 @@ CasesPage::CasesPage(ApplicationContext& context, QWidget* parent) : QWidget(par
     table_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     table_->verticalHeader()->setDefaultSectionSize(64);
     table_->verticalHeader()->setMinimumSectionSize(64);
-    table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    list_layout->addWidget(table_, 0, Qt::AlignTop);
-    list_layout->addStretch(1);
+    table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    list_layout->addWidget(table_, 1);
     left_root->addWidget(list_panel, 1);
 
     auto* split = new QSplitter(Qt::Horizontal);
@@ -551,7 +550,7 @@ void CasesPage::resizeEvent(QResizeEvent* event) {
         split->setMinimumHeight(narrow_page ? 700 : 0);
         setMinimumHeight(narrow_page ? 860 : 680);
         if (auto* list_scroll = findChild<QScrollArea*>(QStringLiteral("casesMainScroll")))
-            list_scroll->setVerticalScrollBarPolicy(narrow_page ? Qt::ScrollBarAlwaysOff : Qt::ScrollBarAsNeeded);
+            list_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         if (narrow_page) split->setSizes({380, 320});
         else split->setSizes({std::max(640, width() * 68 / 100), std::max(320, width() * 32 / 100)});
     }
@@ -594,11 +593,8 @@ void CasesPage::resize_case_preview_rows() {
         }
         table_->setRowHeight(row, height);
     }
-    int content_height = table_->horizontalHeader()->height() + 4;
-    for (int row = 0; row < table_->rowCount(); ++row) content_height += table_->rowHeight(row);
-    if (table_->rowCount() == 0) content_height = 174;
     table_->setMinimumHeight(0);
-    table_->setMaximumHeight(std::min(430, content_height));
+    table_->setMaximumHeight(QWIDGETSIZE_MAX);
 }
 
 domain::Id CasesPage::selected_id() const { const auto row = table_->currentRow(); return row < 0 ? domain::Id{} : s(table_->item(row, 0)->data(Qt::UserRole).toString()); }
