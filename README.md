@@ -141,58 +141,6 @@ QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1 ./build/evidence-trace-gui \
 
 The current verification environment does not provide a usable native Wayland/X11 display: Qt's `xcb` plugin cannot initialize because the available display lacks `xcb-cursor`, and an Xvfb attempt also aborted. The screenshot commands therefore prove fresh offscreen rendering only; native mouse interaction still needs to be checked on a normal desktop.
 
-## CLI quick start
-
-All commands accept `--data-dir DIR`; if it is omitted, data is stored in `data/`. The command creates `evidence_trace.sqlite3` and an `attachments/` directory inside that location.
-
-Create and reopen a case:
-
-```sh
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo init
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo case create \
-  --title "Username investigation" \
-  --purpose "Assess a possible account relationship" \
-  --scope "Public sources only" --tags osint,mvp
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo case list
-```
-
-Add investigation material:
-
-```sh
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo entity add CASE_ID \
-  --type username --label john1337 --value john1337 --aliases john1337-old
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo source add CASE_ID \
-  --type web --locator https://example.test/profile --title "Profile"
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo evidence url CASE_ID \
-  https://example.test/profile
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo evidence file CASE_ID \
-  ./screenshot.png
-```
-
-Create and assess a relation:
-
-```sh
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo relation add \
-  --case CASE_ID --subject USERNAME_ENTITY_ID --predicate belongs_to \
-  --object PERSON_ENTITY_ID --reasoning "Visible indicators are consistent."
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo claim link \
-  CLAIM_ID EVIDENCE_ID --role supports
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo claim status \
-  CLAIM_ID confirmed --explanation "The preserved item supports the assessment."
-```
-
-Export, report, and restore:
-
-```sh
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo export archive \
-  --case CASE_ID --output /tmp/case.zip
-./build/evidence-trace --data-dir /tmp/evidence-trace-demo export report \
-  --case CASE_ID --output /tmp/case.md
-./build/evidence-trace --data-dir /tmp/clean-evidence-trace import \
-  /tmp/case.zip --mode skip
-```
-
-Run `./build/evidence-trace help` for the complete command list. IDs printed by create commands are the IDs used by later commands.
 
 ## Data and safety notes
 
