@@ -468,7 +468,6 @@ CasesPage::CasesPage(ApplicationContext& context, QWidget* parent) : QWidget(par
     detail_unresolved_->setStyleSheet(QStringLiteral("QLabel { background: #16243a; border-radius: 6px; padding: 7px; }") );
     unresolved_layout->addWidget(detail_unresolved_);
     detail_layout->addWidget(unresolved_card);
-
     auto* bottom = new QHBoxLayout;
     bottom->addStretch();
     open->setText(QStringLiteral("Open case"));
@@ -511,7 +510,7 @@ CasesPage::CasesPage(ApplicationContext& context, QWidget* parent) : QWidget(par
     split->addWidget(detail_pane_);
     split->setStretchFactor(0, 1);
     split->setStretchFactor(1, 0);
-    split->setSizes({std::max(640, width() * 2 / 3), std::max(320, width() / 3)});
+    split->setSizes({std::max(640, width() - 320), 320});
     connect(create, &QPushButton::clicked, this, [&] { const auto form = case_form(this); if (!form) return; try { const auto created = context_.cases.create(s(form->title), s(form->purpose), s(form->description), form->target_type ? std::optional<std::string>(s(*form->target_type)) : std::nullopt, s(form->scope), form->tags); refresh(); if (on_open_case) on_open_case(created.id); } catch (const std::exception& error) { show_error(this, error); } });
     connect(open, &QPushButton::clicked, this, &CasesPage::open_selected); connect(table_, &QTableWidget::cellDoubleClicked, this, [this] { open_selected(); }); connect(table_, &QTableWidget::itemSelectionChanged, this, &CasesPage::update_detail); connect(search_, &QLineEdit::textChanged, this, [this] { refresh(); }); connect(status_filter_, &QComboBox::currentIndexChanged, this, [this] { refresh(); });
     connect(archive_button_, &QPushButton::clicked, this, &CasesPage::archive_selected);
@@ -538,6 +537,7 @@ CasesPage::CasesPage(ApplicationContext& context, QWidget* parent) : QWidget(par
         else if (action == remove) delete_selected();
     });
     resize_case_columns();
+    observe_resize(table_, [this](int) { resize_case_columns(); });
     refresh();
     QTimer::singleShot(0, this, [this] { resize_case_columns(); });
 }
@@ -552,7 +552,7 @@ void CasesPage::resizeEvent(QResizeEvent* event) {
         if (auto* list_scroll = findChild<QScrollArea*>(QStringLiteral("casesMainScroll")))
             list_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         if (narrow_page) split->setSizes({380, 320});
-        else split->setSizes({std::max(640, width() * 68 / 100), std::max(320, width() * 32 / 100)});
+        else split->setSizes({std::max(640, width() - 320), 320});
     }
     table_->setMinimumHeight(0);
     const auto narrow = width() < 820;
@@ -570,7 +570,7 @@ void CasesPage::resize_case_columns() {
     header->setStretchLastSection(false);
     header->setMinimumSectionSize(52);
     const auto available = std::max(640, table_->viewport()->width() - 2);
-    const std::array<double, 7> proportions = {0.20, 0.24, 0.10, 0.17, 0.08, 0.08, 0.13};
+    const std::array<double, 7> proportions = {0.20, 0.18, 0.10, 0.17, 0.08, 0.08, 0.19};
     int used = 0;
     for (int index = 0; index < static_cast<int>(proportions.size()); ++index) {
         header->setSectionResizeMode(index, QHeaderView::Fixed);

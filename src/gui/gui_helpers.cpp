@@ -334,7 +334,7 @@ void apply_theme(QApplication& application) {
         QLabel[tagChip="true"][tagTone="blue"] { color: #a8ceff; background: #122540; border-color: #285387; }
         QLabel[tagChip="true"][tagTone="teal"] { color: #a0e9df; background: #102c2b; border-color: #276c68; }
         QLabel[tagChip="true"][tagTone="neutral"] { color: #c3ccdd; background: #172233; border-color: #34445b; }
-        QPushButton { min-height: 32px; background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #17152a, stop:1 #0e1220); border: 1px solid #704bd2; border-radius: 9px; padding: 5px 12px; color: #e5deff; font-size: 8.5pt; }
+        QPushButton { min-height: 32px; background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #17152a, stop:1 #0e1220); border: 1px solid #704bd2; border-radius: 6px; padding: 0 12px; color: #e5deff; font-size: 8.5pt; }
         QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #7544ed, stop:0.52 #5b2bcf, stop:1 #421b9f); border-color: #b095ff; color: #ffffff; }
         QPushButton:pressed { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4c208f, stop:1 #2b145d); border-color: #c3adff; }
         QPushButton:disabled { color: #68718a; background: #10131e; border-color: #30294a; }
@@ -347,7 +347,7 @@ void apply_theme(QApplication& application) {
         QPushButton[nav="true"][caseTab="true"][navActive="true"] { background: transparent; border: 0; border-bottom: 2px solid #a982ff; color: #d0b9ff; font-weight: 600; }
         QPushButton[nav="true"][caseTab="true"][navActive="true"]:hover { background: #111523; border: 0; border-bottom: 2px solid #c0a7ff; color: #eee5ff; }
         QScrollArea#caseNavigationScroll { background: #090e17; border: 0; border-bottom: 1px solid #202c3d; }
-        QPushButton[caseFilter="true"] { min-height: 34px; background: #0e1724; border: 1px solid #263852; border-radius: 7px; padding: 5px 10px; color: #b8c4d8; }
+        QPushButton[caseFilter="true"] { min-height: 34px; background: #0e1724; border: 1px solid #263852; border-radius: 6px; padding: 0 10px; color: #b8c4d8; }
         QPushButton[caseFilter="true"][filterActive="true"] { background: #21174a; border-color: #936cff; color: #d7c8ff; }
         QPushButton[nav="true"]::menu-indicator { image: none; }
         QPushButton[breadcrumb="true"] { height: 16px; min-height: 16px; max-height: 16px; background: transparent; border: 0; padding: 0; color: #9baac2; }
