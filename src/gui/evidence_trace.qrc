@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/icons">
+    <file alias="evidence-trace.png">../../docs/image/Neon Hexagonal Cube Network.png</file>
+  </qresource>
+</RCC>
