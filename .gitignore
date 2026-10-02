@@ -1,0 +1,23 @@
+# CMake build trees and generated configuration.
+/build/
+/build-*/
+/build_*/
+/cmake-build-*/
+/CMakeFiles/
+/data/
+
+# Local investigation databases, preserved attachments, and generated case exports.
+*.sqlite3
+*.sqlite3-*
+*.bak
+*.zip
+*.7z
+*.tmp
+*.swp
+compile_commands.json
+.DS_Store
+/test_file
+/test-artifacts/
+/reports/
+/screenshots/
+*.log
