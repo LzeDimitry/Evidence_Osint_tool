@@ -2,6 +2,7 @@
 #include "gui/main_window.hpp"
 
 #include <QApplication>
+#include <QIcon>
 #include <QMessageBox>
 #include <QTimer>
 
@@ -11,6 +12,8 @@
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
+    const QIcon application_icon(QStringLiteral(":/icons/evidence-trace.png"));
+    application.setWindowIcon(application_icon);
     QCoreApplication::setOrganizationName(QStringLiteral("Evidence Trace"));
     QCoreApplication::setApplicationName(QStringLiteral("Evidence Trace"));
     evidence_trace::gui::apply_theme(application);
@@ -38,8 +41,13 @@ int main(int argc, char** argv) {
     }
     try {
         evidence_trace::gui::MainWindow window(data_directory);
-        if (window_size) window.resize(*window_size);
-        window.show();
+        window.setWindowIcon(application_icon);
+        if (window_size) {
+            window.resize(*window_size);
+            window.show();
+        } else {
+            window.showMaximized();
+        }
         if (!page.empty()) QTimer::singleShot(250, &window, [&window, page] {
             if (page == "playbooks") window.show_playbooks();
             else if (page == "settings") window.show_settings();

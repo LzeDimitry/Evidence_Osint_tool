@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Evidence Trace
+Comment=Local OSINT investigation workbench
+Exec=evidence-trace-gui
+Icon=evidence-trace
+Terminal=false
+Categories=Utility;Office;
+StartupWMClass=evidence-trace-gui

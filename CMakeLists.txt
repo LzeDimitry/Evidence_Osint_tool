@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 project(evidence_trace VERSION 0.1.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -54,6 +56,7 @@ target_compile_options(evidence-trace PRIVATE -Wall -Wextra -Wpedantic)
 # Frontend: Qt desktop application over evidence_trace_core.
 set(EVIDENCE_TRACE_GUI_SOURCES
     src/gui/main.cpp
+    src/gui/evidence_trace.qrc
     src/gui/application_context.cpp
     src/gui/gui_helpers.cpp
     src/gui/dialogs.cpp
@@ -74,3 +77,10 @@ target_compile_options(evidence_trace_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME evidence_trace_integration COMMAND evidence_trace_tests)
 
 install(TARGETS evidence-trace evidence-trace-gui RUNTIME DESTINATION bin)
+install(FILES "docs/image/Neon Hexagonal Cube Network.png"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps"
+    RENAME evidence-trace.png
+)
+install(FILES packaging/evidence-trace.desktop
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/applications"
+)
