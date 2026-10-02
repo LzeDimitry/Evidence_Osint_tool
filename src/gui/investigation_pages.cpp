@@ -1068,13 +1068,13 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     auto* left = new QWidget;
     auto* left_layout = new QVBoxLayout(left);
     left_layout->setContentsMargins(0, 0, 0, 0);
-    left_layout->setSpacing(5);
+    left_layout->setSpacing(0);
 
     auto* graph_card = card();
     graph_card->setFixedHeight(294);
     auto* graph_layout = new QVBoxLayout(graph_card);
     graph_layout->setContentsMargins(10, 9, 10, 7);
-    graph_layout->setSpacing(0);
+    graph_layout->setSpacing(6);
     graph_layout->setContentsMargins(12, 9, 10, 7);
     auto* graph_toolbar = new QHBoxLayout;
     graph_toolbar->setContentsMargins(0, 0, 0, 0);
@@ -1082,7 +1082,8 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     auto* fit = button(QStringLiteral("Fit to view"));
     fit->setIcon(ui_icon(UiIcon::Target, QColor("#b7c4da")));
     fit->setIconSize(QSize(14, 14));
-    fit->setFixedSize(104, 29);
+    fit->setFixedSize(104, 34);
+    fit->setStyleSheet(QStringLiteral("QPushButton { min-height: 0px; padding: 0 6px; }") );
     auto* graph_search = new QLineEdit;
     graph_search->setPlaceholderText(QStringLiteral("Find entity in map..."));
     graph_search->addAction(ui_icon(UiIcon::Search, QColor("#9fb0c8")), QLineEdit::LeadingPosition);
@@ -1110,8 +1111,11 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     zoom_in->setIcon(zoom_icon(true));
     zoom_out->setIconSize(QSize(16, 16));
     zoom_in->setIconSize(QSize(16, 16));
-    zoom_out->setFixedSize(29, 29);
-    zoom_in->setFixedSize(29, 29);
+    zoom_out->setFixedSize(34, 34);
+    zoom_in->setFixedSize(34, 34);
+    const auto compact_graph_button_style = QStringLiteral("QPushButton { min-height: 0px; padding: 0; }");
+    zoom_out->setStyleSheet(compact_graph_button_style);
+    zoom_in->setStyleSheet(compact_graph_button_style);
     zoom_out->setToolTip(QStringLiteral("Zoom out"));
     zoom_in->setToolTip(QStringLiteral("Zoom in"));
     graph_toolbar->addWidget(fit);
@@ -1122,11 +1126,10 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     graph_layout->addLayout(graph_toolbar);
     graph_ = new RelationGraphWidget;
     graph_layout->addWidget(graph_, 1);
-    left_layout->addWidget(graph_card);
-    left_layout->addSpacing(3);
+    left_layout->addWidget(graph_card, 0, Qt::AlignTop);
 
     auto* claims_toolbar = new QWidget;
-    claims_toolbar->setFixedHeight(33);
+    claims_toolbar->setFixedHeight(42);
     auto* claims_layout = new QHBoxLayout(claims_toolbar);
     claims_layout->setContentsMargins(8, 0, 10, 0);
     claims_layout->setSpacing(6);
@@ -1157,11 +1160,11 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     clear_entity_filter_ = button(QStringLiteral("Clear entity filter"));
     clear_entity_filter_->setVisible(false);
     auto* add = button(QStringLiteral("＋ New claim"), true);
-    add->setFixedHeight(27);
+    add->setMinimumHeight(32);
     add->setMinimumWidth(add->sizeHint().width() + 4);
     add->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     auto* add_entity = button(QStringLiteral("＋ Add entity"));
-    add_entity->setFixedHeight(27);
+    add_entity->setMinimumHeight(32);
     add_entity->setMinimumWidth(add_entity->sizeHint().width() + 4);
     add_entity->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     claims_layout->addWidget(status_filter_);
@@ -1170,7 +1173,7 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     claims_layout->addWidget(clear_entity_filter_);
     claims_layout->addWidget(add);
     claims_layout->addWidget(add_entity);
-    left_layout->addWidget(claims_toolbar);
+    left_layout->addWidget(claims_toolbar, 0, Qt::AlignTop);
 
     table_ = table_with_empty_state();
     configure_table(table_, {QString(), QStringLiteral("Subject"), QStringLiteral("Predicate"), QStringLiteral("Object"), QStringLiteral("Status"), QStringLiteral("Supporting"), QStringLiteral("Contradicting"), QStringLiteral("Updated")});
@@ -1182,6 +1185,7 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     }
     table_->setWordWrap(false);
     table_->setTextElideMode(Qt::ElideRight);
+    table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     table_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     table_->verticalHeader()->setDefaultSectionSize(28);
     table_->verticalHeader()->setMinimumSectionSize(28);
@@ -1211,7 +1215,8 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
         if (auto* header_item = table_->horizontalHeaderItem(column)) header_item->setTextAlignment(Qt::AlignCenter | Qt::AlignVCenter);
     }
     table_->setColumnHidden(0, false);
-    left_layout->addWidget(table_, 1);
+    left_layout->addSpacing(5);
+    left_layout->addWidget(table_, 1, Qt::AlignTop);
     page_split->addWidget(left);
 
     detail_scroll_ = new QScrollArea;
@@ -1373,7 +1378,8 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     detail_layout->addWidget(reasoning_group);
 
     auto* add_supporting = button(QStringLiteral("＋ Add evidence"));
-    add_supporting->setFixedSize(92, 25);
+    add_supporting->setMinimumHeight(32);
+    add_supporting->setMinimumWidth(add_supporting->sizeHint().width());
     supporting_list_ = new QWidget;
     supporting_list_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     auto* supporting_layout = new QVBoxLayout(supporting_list_);
@@ -1390,7 +1396,8 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     detail_layout->addWidget(supporting_group);
 
     auto* add_contradicting = button(QStringLiteral("＋ Add evidence"));
-    add_contradicting->setFixedSize(92, 25);
+    add_contradicting->setMinimumHeight(32);
+    add_contradicting->setMinimumWidth(add_contradicting->sizeHint().width());
     contradicting_list_ = new QWidget;
     contradicting_list_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     auto* contradicting_layout = new QVBoxLayout(contradicting_list_);
@@ -1456,7 +1463,7 @@ ClaimsPage::ClaimsPage(ApplicationContext& context, const domain::Id& case_id, Q
     page_split->addWidget(right);
     page_split->setSizes({std::max(390, width() * 66 / 100), std::max(260, width() * 34 / 100)});
     observe_resize(this, [graph_card, page_split](int width) {
-        graph_card->setFixedHeight(width >= 1400 ? 350 : width >= 950 ? 294 : 190);
+        graph_card->setFixedHeight(width >= 950 ? 294 : 190);
         const bool narrow = width < 1000;
         page_split->setOrientation(narrow ? Qt::Vertical : Qt::Horizontal);
         page_split->setMinimumHeight(narrow ? 740 : 0);

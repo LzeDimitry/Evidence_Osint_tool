@@ -10,8 +10,8 @@ The [documentation policy](policy/project_documentation_policy.md) governs appro
 | --- | --- |
 | Product requirements | [English specification](spec/evidence-trace-spec.md) |
 | Release verification and remaining checks | [Acceptance record](spec/acceptance.md) |
-| Scripted usage | [CLI guide](user/cli.md) |
 | Build and startup | [Development build](development/build.md) |
+| Scripted usage | [CLI guide](user/cli.md) |
 | Understand boundaries | [Architecture](development/architecture.md) and [module registry](internal_spec/modules_registry.md) |
 | Change the database | [Migrations](development/migrations.md) |
 | Run checks | [Tests](development/tests.md) and [documentation validation](development/documentation-validation.md) |
