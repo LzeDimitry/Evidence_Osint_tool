@@ -62,6 +62,7 @@ set(EVIDENCE_TRACE_GUI_SOURCES
     src/gui/dialogs.cpp
     src/gui/global_pages.cpp
     src/gui/investigation_pages.cpp
+    src/gui/entity_profile_page.cpp
     src/gui/context_pages.cpp
     src/gui/main_window.cpp
 )

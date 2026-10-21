@@ -4,6 +4,7 @@
 
 #include <sstream>
 #include <stdexcept>
+#include <algorithm>
 
 namespace evidence_trace::services {
 
@@ -46,7 +47,7 @@ void InvestigationService::ensure_case(const domain::Id& case_id) const {
 
 domain::Entity InvestigationService::get_entity_internal(const domain::Id& id) const {
     auto statement = database_.prepare(
-        "SELECT id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, created_at, updated_at "
+        "SELECT id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, image_paths_json, created_at, updated_at "
         "FROM entities WHERE id = ?;");
     statement.bind(1, id);
     if (!statement.step()) throw std::runtime_error("Entity not found: " + id);
@@ -65,7 +66,7 @@ domain::Source InvestigationService::get_source_internal(const domain::Id& id) c
 domain::Evidence InvestigationService::get_evidence_internal(const domain::Id& id) const {
     auto statement = database_.prepare(
         "SELECT id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, "
-        "text_content, source_url, captured_at, imported_at, note, quotation_location, created_at "
+        "text_content, source_url, captured_at, imported_at, note, quotation_location, image_paths_json, created_at "
         "FROM evidence WHERE id = ?;");
     statement.bind(1, id);
     if (!statement.step()) throw std::runtime_error("Evidence not found: " + id);
@@ -142,8 +143,9 @@ domain::Entity InvestigationService::read_entity(database::Statement& statement)
     value.details_json = statement.column_text(6);
     value.tags_json = statement.column_text(7);
     value.aliases_json = statement.column_text(8);
-    value.created_at = statement.column_text(9);
-    value.updated_at = statement.column_text(10);
+    value.image_paths_json = statement.column_text(9);
+    value.created_at = statement.column_text(10);
+    value.updated_at = statement.column_text(11);
     return value;
 }
 
@@ -178,7 +180,8 @@ domain::Evidence InvestigationService::read_evidence(database::Statement& statem
     value.imported_at = statement.column_text(12);
     value.note = statement.column_text(13);
     value.quotation_location = statement.column_text(14);
-    value.created_at = statement.column_text(15);
+    value.image_paths_json = statement.column_text(15);
+    value.created_at = statement.column_text(16);
     return value;
 }
 
@@ -228,12 +231,13 @@ domain::Entity InvestigationService::create_entity(const domain::Id& case_id,
     value.details_json = details_json;
     value.tags_json = tags_to_json(tags);
     value.aliases_json = tags_to_json(aliases);
+    value.image_paths_json = "[]";
     value.created_at = now;
     value.updated_at = now;
     database::Transaction transaction(database_);
     auto statement = database_.prepare(
-        "INSERT INTO entities(id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, created_at, updated_at) "
-        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+        "INSERT INTO entities(id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, image_paths_json, created_at, updated_at) "
+        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
     statement.bind(1, value.id);
     statement.bind(2, value.case_id);
     statement.bind(3, domain::to_string(value.type));
@@ -243,8 +247,9 @@ domain::Entity InvestigationService::create_entity(const domain::Id& case_id,
     statement.bind(7, value.details_json);
     statement.bind(8, value.tags_json);
     statement.bind(9, value.aliases_json);
-    statement.bind(10, value.created_at);
-    statement.bind(11, value.updated_at);
+    statement.bind(10, value.image_paths_json);
+    statement.bind(11, value.created_at);
+    statement.bind(12, value.updated_at);
     statement.step();
     logger_.record(case_id, "created", "entity", value.id, "Entity created: " + label);
     transaction.commit();
@@ -256,22 +261,75 @@ void InvestigationService::update_entity(const domain::Id& id,
                                           const std::string& original_value,
                                           const std::string& details_json,
                                           const std::vector<std::string>& tags,
-                                          const std::vector<std::string>& aliases) {
+                                          const std::vector<std::string>& aliases,
+                                          std::optional<domain::EntityType> new_type) {
     const auto current = get_entity_internal(id);
     if (domain::trim(label).empty()) throw std::invalid_argument("Entity label is required");
+    const auto target_type = new_type.value_or(current.type);
     const auto value = original_value.empty() ? label : original_value;
     auto statement = database_.prepare(
-        "UPDATE entities SET label = ?, original_value = ?, canonical_value = ?, details_json = ?, tags_json = ?, aliases_json = ?, updated_at = ? WHERE id = ?;");
-    statement.bind(1, label);
-    statement.bind(2, original_value);
-    statement.bind(3, canonical_value(current.type, value));
-    statement.bind(4, details_json);
-    statement.bind(5, tags_to_json(tags));
-    statement.bind(6, tags_to_json(aliases));
-    statement.bind(7, domain::utc_now());
-    statement.bind(8, id);
+        "UPDATE entities SET type = ?, label = ?, original_value = ?, canonical_value = ?, details_json = ?, tags_json = ?, aliases_json = ?, image_paths_json = ?, updated_at = ? WHERE id = ?;");
+    statement.bind(1, domain::to_string(target_type));
+    statement.bind(2, label);
+    statement.bind(3, original_value);
+    statement.bind(4, canonical_value(target_type, value));
+    statement.bind(5, details_json);
+    statement.bind(6, tags_to_json(tags));
+    statement.bind(7, tags_to_json(aliases));
+    statement.bind(8, current.image_paths_json);
+    statement.bind(9, domain::utc_now());
+    statement.bind(10, id);
     statement.step();
     logger_.record(current.case_id, "updated", "entity", id, "Entity details updated");
+}
+
+namespace {
+std::vector<std::string> string_array(const std::string& json) {
+    std::vector<std::string> values; std::string current; bool in_string = false, escaped = false;
+    for (const char ch : json) {
+        if (!in_string) { if (ch == '"') { in_string = true; current.clear(); } continue; }
+        if (escaped) { current += ch; escaped = false; }
+        else if (ch == '\\') escaped = true;
+        else if (ch == '"') { values.push_back(current); in_string = false; }
+        else current += ch;
+    }
+    return values;
+}
+std::string encode_string_array(const std::vector<std::string>& values) {
+    std::string out = "[";
+    for (std::size_t i = 0; i < values.size(); ++i) { if (i) out += ','; out += json_escape(values[i]); }
+    return out + ']';
+}
+}
+
+domain::Entity InvestigationService::add_entity_image(const domain::Id& id, const std::filesystem::path& image) {
+    auto value = get_entity_internal(id);
+    auto staged = attachment_store_.stage_file(image);
+    const auto relative = std::filesystem::path("attachments") / (domain::new_id() + ".bin");
+    auto paths = string_array(value.image_paths_json);
+    try {
+        attachment_store_.move_to_final(staged, relative); paths.push_back(relative.generic_string());
+        auto statement = database_.prepare("UPDATE entities SET image_paths_json = ?, updated_at = ? WHERE id = ?;");
+        statement.bind(1, encode_string_array(paths)); statement.bind(2, domain::utc_now()); statement.bind(3, id); statement.step();
+        logger_.record(value.case_id, "added", "entity-image", id, "Entity image added");
+        value.image_paths_json = encode_string_array(paths); return value;
+    } catch (...) { std::error_code ignored; std::filesystem::remove(attachment_store_.absolute_path(relative), ignored); throw; }
+}
+
+void InvestigationService::remove_entity_image(const domain::Id& id, const std::string& relative_path) {
+    auto value = get_entity_internal(id); auto paths = string_array(value.image_paths_json);
+    const auto it = std::find(paths.begin(), paths.end(), relative_path);
+    if (it == paths.end()) throw std::invalid_argument("Image is not attached to this entity");
+    paths.erase(it);
+    auto staged = attachment_store_.stage_removal(relative_path);
+    try {
+        database::Transaction transaction(database_);
+        auto statement = database_.prepare("UPDATE entities SET image_paths_json = ?, updated_at = ? WHERE id = ?;");
+        statement.bind(1, encode_string_array(paths)); statement.bind(2, domain::utc_now()); statement.bind(3, id); statement.step();
+        logger_.record(value.case_id, "removed", "entity-image", id, "Entity image removed");
+        transaction.commit();
+    } catch (...) { attachment_store_.restore_removal(staged); throw; }
+    attachment_store_.discard_removal(staged);
 }
 
 void InvestigationService::delete_entity(const domain::Id& id, bool explicit_confirmation) {
@@ -295,6 +353,10 @@ void InvestigationService::delete_entity(const domain::Id& id, bool explicit_con
         throw std::invalid_argument("Entity is linked to notes; explicit confirmation is required before deletion");
     }
 
+    std::vector<storage::StagedRemoval> staged_images;
+    try { for (const auto& path : string_array(entity.image_paths_json)) staged_images.push_back(attachment_store_.stage_removal(path)); }
+    catch (...) { for (auto it = staged_images.rbegin(); it != staged_images.rend(); ++it) attachment_store_.restore_removal(*it); throw; }
+    try {
     database::Transaction transaction(database_);
     logger_.record(entity.case_id, "deleted", "entity", id,
                    "Entity deleted after explicit confirmation",
@@ -306,13 +368,15 @@ void InvestigationService::delete_entity(const domain::Id& id, bool explicit_con
     delete_statement.bind(1, id);
     delete_statement.step();
     transaction.commit();
+    } catch (...) { for (auto it = staged_images.rbegin(); it != staged_images.rend(); ++it) attachment_store_.restore_removal(*it); throw; }
+    for (auto& staged : staged_images) attachment_store_.discard_removal(staged);
 }
 
 std::vector<domain::Entity> InvestigationService::list_entities(const domain::Id& case_id) const {
     ensure_case(case_id);
     std::vector<domain::Entity> values;
     auto statement = database_.prepare(
-        "SELECT id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, created_at, updated_at "
+        "SELECT id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, image_paths_json, created_at, updated_at "
         "FROM entities WHERE case_id = ? ORDER BY label COLLATE NOCASE, id;");
     statement.bind(1, case_id);
     while (statement.step()) values.push_back(read_entity(statement));
@@ -329,7 +393,7 @@ std::vector<domain::Entity> InvestigationService::possible_duplicates(const doma
     ensure_case(case_id);
     std::vector<domain::Entity> values;
     auto statement = database_.prepare(
-        "SELECT id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, created_at, updated_at "
+        "SELECT id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, image_paths_json, created_at, updated_at "
         "FROM entities WHERE case_id = ? AND type = ? AND canonical_value = ? ORDER BY created_at;");
     statement.bind(1, case_id);
     statement.bind(2, domain::to_string(type));
@@ -452,8 +516,8 @@ domain::Evidence InvestigationService::add_file_evidence(const domain::Id& case_
         database::Transaction transaction(database_);
         auto statement = database_.prepare(
             "INSERT INTO evidence(id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, "
-            "text_content, source_url, captured_at, imported_at, note, quotation_location, created_at) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+            "text_content, source_url, captured_at, imported_at, note, quotation_location, image_paths_json, created_at) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
         statement.bind(1, value.id);
         statement.bind(2, value.case_id);
         statement.bind(3, value.source_id);
@@ -469,7 +533,8 @@ domain::Evidence InvestigationService::add_file_evidence(const domain::Id& case_
         statement.bind(13, value.imported_at);
         statement.bind(14, value.note);
         statement.bind(15, value.quotation_location);
-        statement.bind(16, value.created_at);
+        statement.bind(16, value.image_paths_json);
+        statement.bind(17, value.created_at);
         statement.step();
         attachment_store_.move_to_final(staged, *value.relative_path);
         moved = true;
@@ -511,8 +576,8 @@ domain::Evidence InvestigationService::add_text_evidence(const domain::Id& case_
     database::Transaction transaction(database_);
     auto statement = database_.prepare(
         "INSERT INTO evidence(id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, "
-        "text_content, source_url, captured_at, imported_at, note, quotation_location, created_at) "
-        "VALUES(?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?);");
+        "text_content, source_url, captured_at, imported_at, note, quotation_location, image_paths_json, created_at) "
+        "VALUES(?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?);");
     statement.bind(1, value.id);
     statement.bind(2, value.case_id);
     statement.bind(3, value.source_id);
@@ -523,7 +588,8 @@ domain::Evidence InvestigationService::add_text_evidence(const domain::Id& case_
     statement.bind(8, value.imported_at);
     statement.bind(9, value.note);
     statement.bind(10, value.quotation_location);
-    statement.bind(11, value.created_at);
+    statement.bind(11, value.image_paths_json);
+    statement.bind(12, value.created_at);
     statement.step();
     logger_.record(case_id, "added", "evidence", value.id, "Text evidence added");
     transaction.commit();
@@ -551,8 +617,8 @@ domain::Evidence InvestigationService::add_url_evidence(const domain::Id& case_i
     database::Transaction transaction(database_);
     auto statement = database_.prepare(
         "INSERT INTO evidence(id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, "
-        "text_content, source_url, captured_at, imported_at, note, quotation_location, created_at) "
-        "VALUES(?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, '', ?, ?, ?, ?, '', ?);");
+        "text_content, source_url, captured_at, imported_at, note, quotation_location, image_paths_json, created_at) "
+        "VALUES(?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, '', ?, ?, ?, ?, '', '[]', ?);");
     statement.bind(1, value.id);
     statement.bind(2, value.case_id);
     statement.bind(3, value.source_id);
@@ -568,6 +634,36 @@ domain::Evidence InvestigationService::add_url_evidence(const domain::Id& case_i
     return value;
 }
 
+domain::Evidence InvestigationService::add_evidence_image(const domain::Id& id, const std::filesystem::path& image) {
+    auto value = get_evidence_internal(id);
+    auto staged = attachment_store_.stage_file(image);
+    const auto relative = std::filesystem::path("attachments") / (domain::new_id() + ".bin");
+    auto paths = string_array(value.image_paths_json);
+    try {
+        attachment_store_.move_to_final(staged, relative); paths.push_back(relative.generic_string());
+        auto statement = database_.prepare("UPDATE evidence SET image_paths_json = ? WHERE id = ?;");
+        statement.bind(1, encode_string_array(paths)); statement.bind(2, id); statement.step();
+        logger_.record(value.case_id, "added", "evidence-image", id, "Evidence image added");
+        value.image_paths_json = encode_string_array(paths); return value;
+    } catch (...) { std::error_code ignored; std::filesystem::remove(attachment_store_.absolute_path(relative), ignored); throw; }
+}
+
+void InvestigationService::remove_evidence_image(const domain::Id& id, const std::string& relative_path) {
+    auto value = get_evidence_internal(id); auto paths = string_array(value.image_paths_json);
+    const auto it = std::find(paths.begin(), paths.end(), relative_path);
+    if (it == paths.end()) throw std::invalid_argument("Image is not attached to this evidence");
+    paths.erase(it);
+    auto staged = attachment_store_.stage_removal(relative_path);
+    try {
+        database::Transaction transaction(database_);
+        auto statement = database_.prepare("UPDATE evidence SET image_paths_json = ? WHERE id = ?;");
+        statement.bind(1, encode_string_array(paths)); statement.bind(2, id); statement.step();
+        logger_.record(value.case_id, "removed", "evidence-image", id, "Evidence image removed");
+        transaction.commit();
+    } catch (...) { attachment_store_.restore_removal(staged); throw; }
+    attachment_store_.discard_removal(staged);
+}
+
 domain::Evidence InvestigationService::get_evidence(const domain::Id& id) const {
     return get_evidence_internal(id);
 }
@@ -577,7 +673,7 @@ std::vector<domain::Evidence> InvestigationService::list_evidence(const domain::
     std::vector<domain::Evidence> values;
     auto statement = database_.prepare(
         "SELECT id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, "
-        "text_content, source_url, captured_at, imported_at, note, quotation_location, created_at "
+        "text_content, source_url, captured_at, imported_at, note, quotation_location, image_paths_json, created_at "
         "FROM evidence WHERE case_id = ? ORDER BY imported_at DESC, id;");
     statement.bind(1, case_id);
     while (statement.step()) values.push_back(read_evidence(statement));
@@ -896,6 +992,87 @@ void InvestigationService::change_claim_statement(const domain::Id& claim_id, co
     transaction.commit();
 }
 
+void InvestigationService::change_relation_predicate(const domain::Id& claim_id, const std::string& predicate) {
+    const auto claim = get_claim_internal(claim_id);
+    if (!claim.predicate) throw std::invalid_argument("Claim is not a directional relation");
+    const auto value = domain::trim(predicate);
+    if (value.empty()) throw std::invalid_argument("Relationship type is required");
+    std::optional<domain::Id> subject_id, object_id;
+    for (const auto& link : claim_entities(claim_id)) {
+        if (link.role == domain::ClaimEntityRole::Subject) subject_id = link.entity_id;
+        else if (link.role == domain::ClaimEntityRole::Object) object_id = link.entity_id;
+    }
+    if (!subject_id || !object_id) throw std::runtime_error("Relation is missing its subject or object");
+    const auto subject = get_entity_internal(*subject_id);
+    const auto object = get_entity_internal(*object_id);
+    database::Transaction transaction(database_);
+    auto statement = database_.prepare("UPDATE claims SET predicate = ?, statement = ?, updated_at = ? WHERE id = ?;");
+    statement.bind(1, value); statement.bind(2, subject.label + " " + value + " " + object.label); statement.bind(3, domain::utc_now()); statement.bind(4, claim_id); statement.step();
+    logger_.record(claim.case_id, "relation_changed", "relation", claim_id, "Relationship type changed from " + *claim.predicate + " to " + value);
+    transaction.commit();
+}
+
+void InvestigationService::reverse_relation(const domain::Id& claim_id) {
+    const auto claim = get_claim_internal(claim_id);
+    if (!claim.predicate) throw std::invalid_argument("Claim is not a directional relation");
+    std::optional<domain::Id> subject_id, object_id;
+    for (const auto& link : claim_entities(claim_id)) {
+        if (link.role == domain::ClaimEntityRole::Subject) subject_id = link.entity_id;
+        else if (link.role == domain::ClaimEntityRole::Object) object_id = link.entity_id;
+    }
+    if (!subject_id || !object_id) throw std::runtime_error("Relation is missing its subject or object");
+    const auto subject = get_entity_internal(*subject_id);
+    const auto object = get_entity_internal(*object_id);
+    const auto links = claim_entities(claim_id);
+    database::Transaction transaction(database_);
+    auto remove = database_.prepare("DELETE FROM claim_entities WHERE claim_id = ?;"); remove.bind(1, claim_id); remove.step();
+    for (const auto& link : links) {
+        auto role = link.role;
+        if (role == domain::ClaimEntityRole::Subject) role = domain::ClaimEntityRole::Object;
+        else if (role == domain::ClaimEntityRole::Object) role = domain::ClaimEntityRole::Subject;
+        auto insert = database_.prepare("INSERT INTO claim_entities(claim_id, entity_id, role) VALUES(?, ?, ?);");
+        insert.bind(1, claim_id); insert.bind(2, link.entity_id); insert.bind(3, domain::to_string(role)); insert.step();
+    }
+    auto statement = database_.prepare("UPDATE claims SET statement = ?, updated_at = ? WHERE id = ?;");
+    statement.bind(1, object.label + " " + *claim.predicate + " " + subject.label); statement.bind(2, domain::utc_now()); statement.bind(3, claim_id); statement.step();
+    logger_.record(claim.case_id, "relation_reversed", "relation", claim_id, "Relationship direction reversed");
+    transaction.commit();
+}
+
+void InvestigationService::restore_relation(const domain::Claim& claim,
+                                             const std::vector<domain::ClaimEntityLink>& entity_links,
+                                             const std::vector<domain::ClaimEvidenceLink>& evidence_links) {
+    if (!claim.predicate) throw std::invalid_argument("A restored graph relation must have a predicate");
+    ensure_case(claim.case_id);
+    std::int64_t subjects = 0, objects = 0;
+    for (const auto& link : entity_links) {
+        if (link.claim_id != claim.id || get_entity_internal(link.entity_id).case_id != claim.case_id)
+            throw std::invalid_argument("Restored relation entity links must belong to the same case");
+        if (link.role == domain::ClaimEntityRole::Subject) ++subjects;
+        if (link.role == domain::ClaimEntityRole::Object) ++objects;
+    }
+    if (subjects != 1 || objects != 1) throw std::invalid_argument("A restored relation requires exactly one subject and object");
+    for (const auto& link : evidence_links) {
+        if (link.claim_id != claim.id || get_evidence_internal(link.evidence_id).case_id != claim.case_id)
+            throw std::invalid_argument("Restored relation evidence links must belong to the same case");
+    }
+    database::Transaction transaction(database_);
+    auto statement = database_.prepare("INSERT INTO claims(id, case_id, statement, kind, predicate, status, reasoning, recorded_by, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+    statement.bind(1, claim.id); statement.bind(2, claim.case_id); statement.bind(3, claim.statement); statement.bind(4, domain::to_string(claim.kind));
+    statement.bind(5, claim.predicate); statement.bind(6, domain::to_string(claim.status)); statement.bind(7, claim.reasoning); statement.bind(8, claim.recorded_by);
+    statement.bind(9, claim.created_at); statement.bind(10, claim.updated_at); statement.step();
+    for (const auto& link : entity_links) {
+        auto insert = database_.prepare("INSERT INTO claim_entities(claim_id, entity_id, role) VALUES(?, ?, ?);");
+        insert.bind(1, claim.id); insert.bind(2, link.entity_id); insert.bind(3, domain::to_string(link.role)); insert.step();
+    }
+    for (const auto& link : evidence_links) {
+        auto insert = database_.prepare("INSERT INTO claim_evidence(claim_id, evidence_id, role, note) VALUES(?, ?, ?, ?);");
+        insert.bind(1, claim.id); insert.bind(2, link.evidence_id); insert.bind(3, domain::to_string(link.role)); insert.bind(4, link.note); insert.step();
+    }
+    logger_.record(claim.case_id, "restored", "relation", claim.id, "Relationship restored by graph undo");
+    transaction.commit();
+}
+
 void InvestigationService::delete_claim(const domain::Id& id, bool explicit_confirmation) {
     const auto claim = get_claim_internal(id);
     auto count_statement = database_.prepare("SELECT count(*) FROM claim_evidence WHERE claim_id = ?;");
@@ -963,6 +1140,22 @@ std::vector<domain::Note> InvestigationService::list_notes(const domain::Id& cas
     auto statement = database_.prepare("SELECT id, case_id, title, body, created_at, updated_at FROM notes WHERE case_id = ? ORDER BY updated_at DESC, id;");
     statement.bind(1, case_id);
     while (statement.step()) values.push_back(read_note(statement));
+    return values;
+}
+
+std::vector<domain::Id> InvestigationService::note_entity_links(const domain::Id& note_id) const {
+    auto statement = database_.prepare("SELECT entity_id FROM note_entities WHERE note_id = ? ORDER BY entity_id;");
+    statement.bind(1, note_id);
+    std::vector<domain::Id> values;
+    while (statement.step()) values.push_back(statement.column_text(0));
+    return values;
+}
+
+std::vector<domain::Id> InvestigationService::note_evidence_links(const domain::Id& note_id) const {
+    auto statement = database_.prepare("SELECT evidence_id FROM note_evidence WHERE note_id = ? ORDER BY evidence_id;");
+    statement.bind(1, note_id);
+    std::vector<domain::Id> values;
+    while (statement.step()) values.push_back(statement.column_text(0));
     return values;
 }
 

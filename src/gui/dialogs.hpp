@@ -29,6 +29,11 @@ struct EntityForm {
     QString description;
     std::vector<std::string> tags;
     std::vector<std::string> aliases;
+    std::vector<QString> phone_numbers;
+    std::vector<QString> usernames;
+    std::vector<QString> emails;
+    std::vector<QString> identifiers;
+    std::vector<QString> image_paths;
 };
 
 std::optional<EntityForm> entity_form(QWidget* parent, const std::optional<domain::Entity>& existing = std::nullopt);
@@ -42,7 +47,7 @@ struct SourceForm {
     QString reliability_note;
 };
 
-std::optional<SourceForm> source_form(QWidget* parent, const std::optional<domain::Source>& existing = std::nullopt);
+std::optional<SourceForm> source_form(QWidget* parent);
 
 struct EvidenceForm {
     domain::EvidenceKind kind{domain::EvidenceKind::Text};
@@ -52,9 +57,11 @@ struct EvidenceForm {
     QString note;
     QString quotation_location;
     std::optional<domain::Id> source_id;
+    std::vector<QString> image_paths;
 };
 
-std::optional<EvidenceForm> evidence_form(QWidget* parent, const std::vector<domain::Source>& sources);
+std::optional<EvidenceForm> evidence_form(QWidget* parent, const std::vector<domain::Source>& sources,
+                                          domain::EvidenceKind preferred_kind = domain::EvidenceKind::Text);
 
 struct ClaimForm {
     bool relation{true};
@@ -68,14 +75,19 @@ struct ClaimForm {
     QString reasoning;
 };
 
-std::optional<ClaimForm> claim_form(QWidget* parent, const std::vector<domain::Entity>& entities);
+std::optional<ClaimForm> claim_form(QWidget* parent, const std::vector<domain::Entity>& entities,
+                                    const domain::Id& subject_id = {}, const domain::Id& object_id = {});
 
 struct NoteForm {
     QString title;
     QString body;
+    std::vector<domain::Id> entity_ids;
+    std::vector<domain::Id> evidence_ids;
 };
 
-std::optional<NoteForm> note_form(QWidget* parent);
+std::optional<NoteForm> note_form(QWidget* parent,
+                                  const std::vector<domain::Entity>& entities,
+                                  const std::vector<domain::Evidence>& evidence);
 
 struct RunForm {
     domain::Id playbook_id;
@@ -126,6 +138,8 @@ struct LinkEvidenceForm {
     domain::Id evidence_id;
     std::optional<QString> import_file_path;
     std::optional<domain::Id> import_source_id;
+    std::optional<QString> new_url;
+    std::optional<QString> new_text;
     domain::EvidenceRole role{domain::EvidenceRole::Supports};
     QString note;
 };
@@ -134,7 +148,9 @@ std::optional<LinkEvidenceForm> link_evidence_form(QWidget* parent,
                                                    const std::vector<domain::Evidence>& evidence,
                                                    const std::vector<domain::Source>& sources = {},
                                                    bool include_link_note = true,
-                                                   bool include_link_role = true);
+                                                   bool include_link_role = true,
+                                                   domain::EvidenceRole preferred_role = domain::EvidenceRole::Supports,
+                                                   bool allow_no_evidence = false);
 
 std::optional<QString> explanation_form(QWidget* parent, const QString& title, const QString& prompt);
 

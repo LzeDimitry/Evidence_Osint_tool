@@ -18,7 +18,7 @@ Own claim assessments, file bytes, or GUI navigation.
 
 ## Main features and rules
 
-Current schema version is 3. Version 2 adds quotation locations; version 3 adds entity aliases. Opening a newer schema rejects migration. Upgrades back up existing data before sequential migration transactions.
+Current schema version is 4. Version 2 adds quotation locations; version 3 adds entity aliases; version 4 adds image attachment path lists to entities and evidence, defaulting existing records to empty lists. Opening a newer schema rejects migration. Upgrades back up existing data before sequential migration transactions.
 
 ## Dependencies and interfaces
 

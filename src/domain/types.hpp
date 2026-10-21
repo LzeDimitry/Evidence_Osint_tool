@@ -89,6 +89,7 @@ struct Entity {
     std::string details_json;
     std::string tags_json;
     std::string aliases_json;
+    std::string image_paths_json{"[]"};
     std::string created_at;
     std::string updated_at;
 };
@@ -121,6 +122,7 @@ struct Evidence {
     std::string imported_at;
     std::string note;
     std::string quotation_location;
+    std::string image_paths_json{"[]"};
     std::string created_at;
 };
 

@@ -1,20 +1,20 @@
 # Project Documentation Policy
 
-# **ONLY THE PROJECT OWNER MAY APPROVE CHANGES. NO AI AGENT OR OTHER USER MAY APPROVE ANY CHANGE.**
+# **ONLY THE PROJECT OWNER MAY APPROVE HUMAN-FACING DOCUMENTATION CHANGES.**
 
 > **THIS POLICY IS APPROVED BY THE PROJECT OWNER AND EFFECTIVE FROM 2026-10-01.**
 
 > **AFTER OWNER APPROVAL ACTIVATES THIS POLICY, NO CHANGE, COMMIT, TEST, AUTOMATION, OR WORKFLOW MAY BYPASS ITS RULES.**
 
-> **AN AI AGENT MAY MODIFY AN ORIGINAL DOCUMENTATION FILE ONLY IF THE PROJECT OWNER HAS EXPLICITLY GIVEN PERMISSION FOR THAT EDIT.**
+> **AN AI AGENT MAY EDIT INTERNAL PROJECT DOCUMENTATION DIRECTLY WHEN THE TASK AUTHORIZES THAT DOCUMENTATION WORK. HUMAN-FACING DOCUMENTATION STILL REQUIRES A `temp.*` PROPOSAL AND OWNER APPROVAL BEFORE APPLICATION.**
 
 | Field | Value |
 |---|---|
 | Status | Approved — active |
-| Version | 0.3.0 |
+| Version | 0.4.0 |
 | Owner and approver | Project owner |
 | Scope | This repository's documentation |
-| Last updated | 2026-10-01 |
+| Last updated | 2026-10-15 |
 
 This policy defines how project documentation is organized, written, updated,
 and validated. It is the beginning of the project's documentation governance
@@ -23,8 +23,10 @@ not a replacement for the product specification or the implementation itself.
 
 The project owner approved the agreed changes and authorized marking this policy
 Approved in the active conversation on 2026-10-01. This activates version 0.3.0.
-Only the owner may approve future revisions; agents may record and apply the
-owner's explicit decision.
+Version 0.4.0 changes the editing workflow for internal documentation; the
+project owner approved this direct policy edit on 2026-10-15. Only the owner may
+approve human-facing documentation changes; agents may edit internal
+documentation when authorized by the task.
 
 ## 1. Scope and authority
 
@@ -37,15 +39,22 @@ This policy applies to:
 - diagrams, code examples, and technical comments when they document project
   behavior or design decisions.
 
-The project owner is the sole documentation owner and the only person with
-authority to approve this policy or any documentation change.
+For this policy, human-facing documentation means `README.md` and maintained
+content under `docs/user/`. Other documentation, including specifications,
+acceptance records, development guides, module behavior documents, and policies,
+is internal project documentation unless the owner designates a specific file
+as human-facing. `docs/Humans/` is reserved for content maintained by the
+project owner and designated human contributors.
 
-No AI agent, contributor, user, automation, or other person may approve a
-documentation change other than the project owner.
-An AI agent may prepare a proposal only after notifying
-the project owner in the active conversation. The project owner must personally
-review and approve the proposal before it can become a canonical documentation
-change.
+AI agents may read files under `docs/Humans/`, but must not create, edit, delete,
+rename, or move files there. This restriction applies to direct edits and edits
+through scripts or other tools.
+
+The project owner is the sole documentation owner and the only person with
+authority to approve this policy or changes to human-facing documentation.
+Internal project documentation may be directly edited by an AI agent when the
+task authorizes that work. Human-facing proposals require the owner's review and
+approval before they become canonical changes.
 
 The project owner is the person responsible for this repository who explicitly
 identifies themselves as its owner; an agent must not assume another contributor
@@ -89,6 +98,7 @@ docs/
 ├── development/            # build, tests, migrations, architecture
 ├── design/                 # product and GUI design material
 ├── policy/                 # project policies
+├── Humans/                 # owner-maintained material; agents may read only
 ├── templates/              # reusable documentation templates
 └── mb_remeber/             # frozen non-canonical reference material
 ```
@@ -172,18 +182,22 @@ observable behavior:
    resolving that conflict is sufficient; do not request the same direction again.
 3. Implement the authorized code changes.
 4. Run relevant tests and record results, including failures or unavailable checks.
-5. Prepare documentation proposals using the format below. Preserve original
-   files unless the owner explicitly permits a direct edit under section 6.
-6. Identify every proposal, target, and revision to the owner for review.
-7. Obtain owner approval of the exact content and explicit permission to apply it.
-   One owner message may provide both.
-8. Apply only the authorized content and validate the resulting documents.
+5. For human-facing documentation, prepare a `temp.*` proposal using the format
+   below. Internal documentation may be edited directly when the task
+   authorizes that documentation work.
+6. For human-facing proposals, identify every proposal, target, and revision to
+   the owner for review.
+7. Obtain owner approval of the exact proposal before applying it to
+   human-facing documentation. One owner message may provide both approval and
+   permission to apply.
+8. Validate the resulting documents and report direct internal edits.
 
 For a documentation-only change, first verify the current implementation and
 relevant evidence when behavior is affected; code tests are not required for
 pure wording or process edits. Follow steps 1–2 and 5–8. A proposal is not a
-source of truth. An explicit direct-edit instruction uses the exception in
-section 6.
+source of truth. The `temp.*` proposal requirement and owner approval gate apply
+to human-facing documentation; internal documentation may be edited directly
+when the task authorizes it.
 
 ### Proposal format and lifecycle
 
@@ -214,17 +228,17 @@ target's final location.
 
 ### Change type → files to update
 
-The proposal requirements in this matrix may be replaced by an explicit
-owner-authorized direct edit under section 6.
+The proposal requirements in this matrix apply to human-facing documentation.
+Internal documentation may be edited directly when the task authorizes it.
 
 | Change type | Files to update |
 |---|---|
-| Product behavior, business rule, public interface, or data format | After code and tests, prepare a `temp.*` proposal for the canonical English `docs/spec/evidence-trace-spec.md`; include related user/module/development documents, acceptance criteria, and tests when affected. |
-| Internal architecture or implementation constraint | Prepare a `temp.*` proposal for the relevant file under `docs/development/` or `docs/internal_spec/`; update tests or technical notes when the constraint is behaviorally important. |
+| Product behavior, business rule, public interface, or data format | After code and tests, edit the canonical English `docs/spec/evidence-trace-spec.md` directly when authorized; include related user/module/development documents, acceptance criteria, and tests when affected. |
+| Internal architecture or implementation constraint | Edit the relevant file under `docs/development/` or `docs/internal_spec/` directly when authorized; update tests or technical notes when the constraint is behaviorally important. |
 | User workflow, GUI behavior, or CLI command | Prepare a `temp.*` proposal for the relevant file under `docs/user/`; include the canonical specification when the behavior or requirement changed. |
-| Installation, build prerequisites, startup commands, runtime setup, or recovery instructions | Prepare a `temp.*` proposal for `README.md` and the relevant file under `docs/development/`. |
-| Release feature matrix, verified limitation, or acceptance result | Prepare a `temp.*` proposal covering the canonical English specification, `docs/spec/acceptance.md`, and `CHANGELOG.md` when the release history changes. |
-| Documentation process, approval, status, or structure | A `temp.*` proposal for the relevant file under `docs/policy/`; no other document may redefine this policy. |
+| Installation, build prerequisites, startup commands, runtime setup, or recovery instructions | Prepare a `temp.*` proposal for `README.md`; edit the relevant file under `docs/development/` directly when authorized. |
+| Release feature matrix, verified limitation, or acceptance result | Edit the canonical English specification, `docs/spec/acceptance.md`, and `CHANGELOG.md` directly when authorized and when the release history changes. |
+| Documentation process, approval, status, or structure | Edit the relevant file under `docs/policy/` directly when authorized; no other document may redefine this policy. |
 | Ukrainian translation or localization | No update in the current phase. English is the only maintained and canonical documentation language; `docs/mb_remeber/` remains frozen. |
 
 ### README.md update rule
@@ -248,7 +262,8 @@ Every material behavior statement must be marked as `Implemented`,
 `Partial`, or `Planned` when its implementation state is relevant. A
 specification change must not present planned or partial behavior as
 implemented. If the code, tests, and specification disagree, record the
-discrepancy in the `temp.*` proposal and submit it to the project owner.
+discrepancy in the applicable human-facing `temp.*` proposal or internal
+documentation change summary.
 
 Status is relevant whenever a reader could otherwise mistake planned or partial
 behavior for available functionality. A section-level label may cover all its
@@ -259,47 +274,52 @@ unnecessary.
 
 ## 6. Ownership and approval
 
-**ONLY THE PROJECT OWNER MAY APPROVE A DOCUMENTATION CHANGE. NO AI AGENT,
-CONTRIBUTOR, USER, REVIEWER, OR AUTOMATION MAY APPROVE IT.**
+**ONLY THE PROJECT OWNER MAY APPROVE CHANGES TO HUMAN-FACING DOCUMENTATION. NO AI AGENT,
+CONTRIBUTOR, USER, REVIEWER, OR AUTOMATION MAY APPROVE THEM.**
 
-The project owner is the sole documentation owner and final approver. The
-project owner must personally review every proposal before it becomes part of
-the canonical documentation.
+The project owner is the sole documentation owner and final approver for
+human-facing documentation. The project owner must personally review every
+proposal before it becomes part of the canonical human-facing documentation.
 
 AI agents may inspect the repository, change code when the task authorizes code
-work, run tests, and prepare documentation proposals. By default, they must
-create a `temp.*` proposal, notify the owner, and wait for the owner's decision.
-Only the owner grants approval. An agent must not infer approval from silence,
-elapsed time, automated checks, or general encouragement.
+work, run tests, edit internal project documentation when the task authorizes
+that work, and prepare `temp.*` proposals for human-facing documentation. They
+must notify the owner and wait for approval before applying a proposal to a
+human-facing original. An agent must not infer approval from silence, elapsed
+time, automated checks, or general encouragement.
 
-**AN AI AGENT MAY EDIT, OVERWRITE, DELETE, OR RENAME AN ORIGINAL DOCUMENTATION
-FILE ONLY IF THE PROJECT OWNER HAS EXPLICITLY GIVEN PERMISSION FOR THAT
-SPECIFIC EDIT OR OPERATION.**
+**AN AI AGENT MAY EDIT INTERNAL DOCUMENTATION DIRECTLY WHEN THE TASK AUTHORIZES
+THAT WORK. EDITS TO HUMAN-FACING ORIGINALS REQUIRE OWNER APPROVAL AND EXPLICIT
+PERMISSION FOR THAT SPECIFIC EDIT OR OPERATION.**
 
-The owner may explicitly authorize a direct edit without a separate proposal
-file, specifying the target and scope. For example: "Edit
-docs/policy/project_documentation_policy.md directly to add the changes we
-agreed." This authorizes the stated edit, not unrelated changes or automatic
-approval of the resulting document. Record the authorization in the task handoff.
-For changes awaiting review, preserve the previously approved version in version
-control or a review artifact and clearly identify it as the authoritative version.
-Mark the edited version Draft until the owner approves it. Permission to edit
-alone does not grant approval. The owner may also explicitly instruct an agent
-to apply specified, agreed changes and mark the result Approved in one message;
-that instruction approves only those changes. If implementation requires a
-substantive departure from what was agreed, submit that departure for review.
+For internal project documentation outside `docs/Humans/`, task authorization
+permits direct edits without a separate proposal or approval step. AI agents
+may read but never edit `docs/Humans/`. For human-facing documentation,
+the owner may explicitly authorize a direct edit without a separate proposal,
+specifying the target and scope. For example: "Edit docs/user/gui.md directly
+to add the changes we agreed." This authorizes the stated edit, not unrelated
+changes or automatic approval of the resulting document. Record the
+authorization in the task handoff. For changes awaiting review, preserve the
+previously approved version in version control or a review artifact and clearly
+identify it as the authoritative version. Mark the edited version Draft until
+the owner approves it. Permission to edit alone does not grant approval. The
+owner may also explicitly instruct an agent to apply specified, agreed changes
+and mark the result Approved in one message; that instruction approves only
+those changes. If implementation requires a substantive departure from what
+was agreed, submit that departure for review.
 
 After approval, the project owner may apply the proposal personally or
 explicitly authorize an agent to apply exactly the approved content. Any
 difference from the approved proposal requires a new proposal and a new owner
 decision.
 
-Approval must identify each proposal path and revision, or an immutable content
-hash, plus its target files. Record the owner's actual decision and application
-permission in the review conversation or repository review record and reference
-that record in the handoff. An agent may report a real owner decision and apply
-its approved metadata, including `Status: Approved`; it cannot grant that status
-on its own. Authorization persists for the specified content and scope only.
+Approval of human-facing documentation must identify each proposal path and
+revision, or an immutable content hash, plus its target files. Record the
+owner's actual decision and application permission in the review conversation
+or repository review record and reference that record in the handoff. An agent
+may report a real owner decision and apply its approved metadata, including
+`Status: Approved`; it cannot grant that status on its own. Authorization
+persists for the specified content and scope only.
 
 Example: an agent presents `docs/user/temp.cli.md`, revision 2, targeting
 `docs/user/cli.md`. The owner replies: "I approve revision 2 of that proposal
@@ -307,10 +327,16 @@ and authorize you to apply it to docs/user/cli.md." The agent applies its target
 content, validates it, and reports the result. Editing revision 2 afterward
 invalidates that approval for the changed proposal.
 
-Before preparing a proposal, an AI agent must read this policy and the relevant
-current canonical specification, module documentation, technical notes, code,
-and tests when they exist. Reference files, old drafts, translations, and
-generic examples must never be treated as project rules.
+Before preparing a human-facing proposal or directly editing internal
+documentation, an AI agent must read this policy and the relevant current
+canonical specification, module documentation, technical notes, code, and tests
+when they exist. Reference files, old drafts, translations, and generic
+examples must never be treated as project rules.
+
+When a task asks an agent to read or understand the project for its work, it
+must inspect `docs/Humans/`. If the directory is absent, empty, or its contents
+appear incomplete for the requested project context, the agent must tell the
+user to fill it in. The agent must not create or complete its contents.
 
 ## 7. Language, format, and style
 
@@ -429,12 +455,13 @@ specification.
 A documentation-impacting task is not complete until:
 
 - the code has been changed when required and the relevant tests have passed;
-- a documentation proposal exists in a `temp.*` file, or the owner explicitly
-  authorized a direct edit under section 6 and that authorization is recorded;
-- the project owner has been notified in the active conversation;
-- the project owner has personally approved the exact proposed or directly
-  edited content;
-- only the approved content has been applied to the canonical document;
+- a `temp.*` proposal exists for human-facing documentation, unless the owner
+  explicitly authorized a direct edit under section 6;
+- the project owner has been notified in the active conversation for
+  human-facing proposals or direct edits;
+- the project owner has personally approved the exact human-facing content;
+- only approved content has been applied to human-facing originals; internal
+  documentation edits follow the scope authorized by the task;
 - implemented, partial, and planned features are distinguished;
 - code, tests, and canonical documentation agree, or an explicit discrepancy
   is recorded and submitted to the project owner;
@@ -443,8 +470,10 @@ A documentation-impacting task is not complete until:
 - no unintended placeholders or unapproved translation changes remain;
 - the change uses an appropriate commit prefix.
 
-Proposal preparation and authorized direct editing are alternative paths.
-Approval of the exact final content is required before canonical completion.
+Proposal preparation and authorized direct editing are alternative paths for
+human-facing documentation. Internal documentation may be directly edited when
+the task authorizes it. Approval of the exact final human-facing content is
+required before canonical completion.
 An appropriate commit prefix is required only if a commit is made.
 
 Use these handoff states:

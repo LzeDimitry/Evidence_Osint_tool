@@ -14,6 +14,7 @@
 #include <QResizeEvent>
 #include <QSplitter>
 #include <QTableWidget>
+#include <QTabWidget>
 #include <QString>
 #include <QStringList>
 #include <QWidget>
@@ -23,7 +24,15 @@
 #include <string>
 #include <vector>
 
+class QDialog;
+class QDialogButtonBox;
+class QLayout;
+
+namespace evidence_trace::services { class InvestigationService; }
 namespace evidence_trace::gui {
+struct LinkEvidenceForm;
+domain::Id persist_link_evidence(services::InvestigationService& service, const domain::Id& case_id,
+                                 const LinkEvidenceForm& form);
 
 class StateTableWidget final : public QTableWidget {
 public:
@@ -88,6 +97,7 @@ enum class UiIcon {
     Document,
     Download,
     Edit,
+    Email,
     Entity,
     Evidence,
     Export,
@@ -105,9 +115,11 @@ enum class UiIcon {
     Link,
     List,
     More,
+    MapPin,
     Note,
     Organization,
     Person,
+    Phone,
     Play,
     Restore,
     Search,
@@ -123,6 +135,10 @@ enum class UiIcon {
 };
 
 QIcon ui_icon(UiIcon kind, const QColor& color = QColor("#aebbd2"));
+void set_accent_icon(QTableWidgetItem* item, UiIcon kind);
+void set_accent_icon(QComboBox* combo, int index, UiIcon kind);
+void set_accent_tab_icon(QTabWidget* tabs, int index, UiIcon kind);
+void refresh_accent_tab_icons(QTabWidget* tabs);
 QLabel* make_tag_chip(const QString& value, QWidget* parent = nullptr, int maximum_width = 140);
 QWidget* tag_chips(const QStringList& values, QWidget* parent = nullptr, int visible_limit = 3, int maximum_chip_width = 140);
 
@@ -141,6 +157,9 @@ private:
 };
 
 void apply_theme(QApplication& application);
+void apply_user_appearance(QApplication& application);
+QColor appearance_accent_color();
+QColor appearance_accent_text_color();
 bool navigation_glow_enabled();
 void set_navigation_glow_enabled(bool enabled);
 
@@ -151,8 +170,11 @@ QString display_time(const std::string& utc_iso);
 QString display_bytes(std::int64_t bytes);
 QString title_case(const QString& value);
 QString enum_label(const std::string& value);
+QString human_readable_predicate(const QString& predicate);
+UiIcon entity_icon(domain::EntityType type);
+UiIcon evidence_icon(domain::EvidenceKind kind);
+QColor graph_entity_color();
 QString wrap_long_tokens(const QString& value);
-QString two_line_text_preview(const QString& value, const QFont& font, int available_width);
 
 std::vector<std::string> json_strings(const std::string& value);
 std::string json_string_array(const std::vector<std::string>& values);
@@ -175,5 +197,12 @@ void observe_resize(QWidget* widget, std::function<void(int)> callback);
 void show_error(QWidget* parent, const std::exception& error);
 void show_error(QWidget* parent, const QString& message);
 QString shorten_id(const std::string& id);
+
+QDialogButtonBox* dialog_buttons(QDialog& dialog);
+void set_primary_action(QDialogButtonBox* buttons, const QString& text);
+QString join_values(const std::vector<std::string>& values);
+QString join_values(const std::vector<QString>& values);
+std::vector<std::string> split_values(const QString& value);
+void clear_layout(QLayout* layout);
 
 } // namespace evidence_trace::gui

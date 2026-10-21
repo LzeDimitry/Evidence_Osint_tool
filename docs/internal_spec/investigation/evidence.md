@@ -10,6 +10,6 @@ Integrity verification reports missing or changed bytes without changing claim c
 
 One item may link to multiple claims and run steps. Unlinking from a claim does not delete it. Evidence deletion handles its links and attachment removal explicitly; database/filesystem failure recovery uses staged removal. A source still referenced by evidence is protected from deletion.
 
-The GUI previews supported text/images read-only and displays metadata for unsupported material. Automated page capture is Planned and outside the current service.
+The GUI previews supported text/images read-only and displays metadata for unsupported material. Entities and evidence can also carry multiple managed image attachments, including clipboard captures. Attached images are not themselves claim links and do not change claim status. Automated page capture is Planned and outside the current service.
 
 See [module behavior](behavior.md), [technical notes](tech_notes.md), [storage behavior](../storage/behavior.md), and [specification](../../spec/evidence-trace-spec.md).

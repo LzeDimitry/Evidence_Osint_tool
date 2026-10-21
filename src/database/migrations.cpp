@@ -234,6 +234,12 @@ VALUES('00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-00000000
     if (version == 3) {
         return "ALTER TABLE entities ADD COLUMN aliases_json TEXT NOT NULL DEFAULT '[]';";
     }
+    if (version == 4) {
+        return R"SQL(
+ALTER TABLE entities ADD COLUMN image_paths_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE evidence ADD COLUMN image_paths_json TEXT NOT NULL DEFAULT '[]';
+)SQL";
+    }
     throw DatabaseError("No migration exists for schema version " + std::to_string(version));
 }
 

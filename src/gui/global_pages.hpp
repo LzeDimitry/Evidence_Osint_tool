@@ -12,7 +12,6 @@ class QLabel;
 class QPushButton;
 class QComboBox;
 class QResizeEvent;
-class QBoxLayout;
 
 namespace evidence_trace::gui {
 
@@ -24,7 +23,6 @@ public:
     explicit CasesPage(ApplicationContext& context, QWidget* parent = nullptr);
 
     void refresh();
-    void set_search(const QString& text);
     std::function<void(const domain::Id&)> on_open_case;
 
 private:
@@ -72,6 +70,7 @@ public:
 private:
     void update_playbook_detail();
     void update_technique_detail();
+    void update_action_state();
     void move_selected_step(int delta);
     void edit_selected_playbook();
     void edit_selected_technique();
@@ -86,20 +85,24 @@ private:
     QLabel* playbook_description_{nullptr};
     QLabel* technique_title_{nullptr};
     QLabel* technique_body_{nullptr};
+    QPushButton* edit_playbook_button_{nullptr};
+    QPushButton* edit_technique_button_{nullptr};
+    QPushButton* add_step_button_{nullptr};
+    QPushButton* move_step_up_button_{nullptr};
+    QPushButton* move_step_down_button_{nullptr};
 };
 
 class SettingsPage : public QWidget {
 public:
     explicit SettingsPage(ApplicationContext& context, QWidget* parent = nullptr);
 
-    std::function<void(const std::filesystem::path&)> on_data_directory_requested;
+    std::function<bool(const std::filesystem::path&)> on_data_directory_requested;
     std::function<void(bool)> on_navigation_glow_changed;
+    std::function<void()> on_appearance_changed;
 
 private:
-    void resizeEvent(QResizeEvent* event) override;
     ApplicationContext& context_;
     QLineEdit* data_directory_{nullptr};
-    QBoxLayout* columns_{nullptr};
 };
 
 } // namespace evidence_trace::gui

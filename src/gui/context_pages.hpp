@@ -10,6 +10,7 @@ class QLineEdit;
 class QTableWidget;
 class QBoxLayout;
 class QResizeEvent;
+class QPushButton;
 
 namespace evidence_trace::gui {
 
@@ -42,16 +43,19 @@ public:
 
 private:
     void update_run();
+    void update_action_state();
     void update_selected_step();
     void add_step_to_selected_run();
     void link_selected_step_evidence();
     domain::Id selected_run_id() const;
-    domain::Id selected_step_id() const;
     StateTableWidget* runs_{nullptr};
     StateTableWidget* steps_{nullptr};
     StateTableWidget* activity_{nullptr};
     QLabel* run_title_{nullptr};
     QLabel* run_meta_{nullptr};
+    QPushButton* add_step_button_{nullptr};
+    QPushButton* update_step_button_{nullptr};
+    QPushButton* link_evidence_button_{nullptr};
     domain::Id focus_run_id_;
     domain::Id focus_step_id_;
 };

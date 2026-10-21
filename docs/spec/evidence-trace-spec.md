@@ -2,9 +2,9 @@
 
 Status: Approved
 
-**Document version:** 1.3 · **Date:** 2026-10-01 · **Primary product language:** English · **Localization:** Ukrainian deferred; frozen in the current documentation phase
+**Document version:** 1.5 · **Date:** 2026-10-16 · **Primary product language:** English · **Localization:** Ukrainian deferred; frozen in the current documentation phase
 
-> **Verification baseline (historical):** Source document for the implemented MVP. The C++20/Qt 6 Widgets application, SQLite storage, CLI, and core acceptance suite were verified on 2026-09-25. The current GUI also has a shared responsive visual system with readable cards, tables, empty states, tooltips, and small-window scrolling; these presentation improvements do not change the stored data model. “Must” and “shall” continue to define required behavior; the current acceptance matrix records what was actually verified. The GUI provides a focused relationship map for stored binary claims; a dedicated timeline and advanced graph tooling remain extensions.
+> **Verification baseline:** Core workflows were previously verified on 2026-10-08. On 2026-10-16, schema v4 adds managed image references, graph entity and relationship creation, Person identifier capture, and source/text evidence options. The case opens on the interactive graph workspace. Graph position/zoom persistence and direction/predicate changes are implemented; CMake build, CTest, and offscreen case-open captures passed. Native mouse-driven graph journeys remain unverified in this environment. Dedicated timeline and advanced graph layout tooling remain extensions.
 
 ## Contents
 
@@ -63,7 +63,7 @@ Implementation status: Partial. Core behavior is Implemented; limitations and Pl
 
 **Core invariant:** confidence belongs to a **claim or relation**, never to an entity or to a source as a whole. An account may demonstrably exist while the claim that it belongs to a particular person is still only a hypothesis.
 
-The new claim or relation form keeps the `observation`/`inference` kind selectable for both entity claims and directional relations; directional relations default to `inference` for compatibility with the usual hypothesis workflow.
+The new claim or relation form keeps the `observation`/`inference` kind visible and selectable for both entity claims and directional relations. Both begin as `observation`; switching record mode preserves the chosen kind. Directional relation statements are suggested from the selected subject, predicate, and object, and users can edit the suggestion.
 
 Claim statuses are `unverified` (evidence has not yet been evaluated), `possible` (weak indication), `probable` (multiple consistent indicators or strong indirect support), `confirmed` (the investigator records sufficient direct support), and `refuted` (the claim has been contradicted sufficiently to reject it). `confirmed` is a documented human assessment, not a mathematical or legal guarantee. Each status change records the previous and new values in the activity log. **Refuted claims remain in the history.**
 
@@ -93,7 +93,7 @@ Implementation status: Partial. Core behavior is Implemented; limitations and Pl
 
 ### 4.1. From a username to a justified relation
 
-1. Create a case with a title, purpose, target, and investigation scope.
+1. Create a case with a required title. Add purpose, description, target, scope, and tags now or later; all are optional.
 2. Add `Username: john1337` and `Person: John Doe` as separate entities.
 3. Add a source with a profile URL, preserve a screenshot, and record the acquisition time.
 4. Create the claim `john1337 belongs_to John Doe`, attach the screenshot, and explain which visible indicators support the relation.
@@ -131,20 +131,22 @@ Implementation status: Partial. Core behavior is Implemented; limitations and Pl
 
 ### 5.2. Entities — FR-ENT
 
-- **FR-ENT-01:** Supported types: `person`, `username`, `account`, `email`, `phone`, `domain`, `ip`, `company`, `place`, `url`, `image`, `document`, `event`, `other`. Creating an entity requires a type and short label; additional fields are optional.
+- **FR-ENT-01:** Supported types: `person`, `username`, `account`, `email`, `phone`, `domain`, `ip`, `company`, `place`, `url`, `image`, `document`, `event`, `other`. Creating an entity requires a type and short label; additional fields are optional. Person creation may include multiple phone numbers, usernames, email addresses, and other identifiers. Each identifier is stored as a normal typed entity connected by an unverified `identifier_for` relation; creating it does not establish verification.
 - **FR-ENT-02:** An entity page shows its value, aliases, description, tags, related claims, evidence, and change history. Adding an account does not establish who owns it.
 - **FR-ENT-03:** Normalize values for search only: domain names case-insensitively; email while preserving the original input; URLs while retaining the exact value entered. Normalization **must not automatically merge** records.
 - **FR-ENT-04:** Warn about a possible duplicate within the case and allow both records to remain. Merging is deferred until a release can record the complete history of relinked references.
 - **FR-ENT-05:** The entity table provides a context menu for editing, opening the entity's related claims in Claims & Relations, and permanently deleting an entity after confirmation. An entity referenced by claims cannot be deleted until those claims are reviewed; the UI explains the restriction instead of silently invalidating or deleting the claims. Note links are removed with explicit confirmation while the notes remain.
+- **FR-ENT-06:** Entities may have multiple ordinary images stored as managed attachments. Clipboard images can be pasted with Ctrl+V in entity and evidence forms when the clipboard contains an image; ordinary text paste remains available otherwise. Entity photographs are descriptive media, not evidence or verification.
 
 ### 5.3. Sources and evidence — FR-EVD
 
 - **FR-EVD-01:** A source stores its type (`web`, `document`, `registry`, `person`, `other`), locator, title, UTC access time, and optional author and reliability note. A source and its local preserved copy are separate records.
-- **FR-EVD-02:** Create evidence from a local file or text excerpt. For a file, copy its bytes into case storage and record the original filename, type, size, SHA-256, UTC import time, and optional source URL. Changing the original file afterward must not change the stored copy.
+- **FR-EVD-02:** Create evidence from a local file, text excerpt, external URL, or attached image. For a file or image, copy its bytes into case storage and record the original filename, type, size, SHA-256, UTC import time, and optional source URL. Changing the original file afterward must not change the stored copy. A URL or text evidence item does not require a file.
 - **FR-EVD-03:** Stored evidence files are not edited in place. A revised version is a new item. “Verify integrity” recomputes SHA-256 and reports a mismatch or missing file. The desktop UI provides read-only in-app previews for text and supported image files, and a metadata-only fallback for unsupported files; it never executes a preserved file.
 - **FR-EVD-04:** A quotation stores its text and precise location within the source: page, section, URL fragment, or note. An empty location displays as “Not specified.”
 - **FR-EVD-05:** One evidence item may support multiple claims. Removing a link must not delete the file. Deleting an item linked to claims requires explicit confirmation and leaves a log event.
 - **FR-EVD-06:** A URL without a preserved copy displays `external only` because its content may have changed. Automated page capture is a separate future module.
+- **FR-EVD-07:** Evidence may have multiple separately managed image attachments, including pasted screenshots. Attaching an image does not mark a claim or relation verified. Case archives preserve these image attachments and restore them to managed storage on import.
 
 ### 5.4. Claims and relations — FR-CLM
 
@@ -152,7 +154,7 @@ Implementation status: Partial. Core behavior is Implemented; limitations and Pl
 - **FR-CLM-02:** A claim refers to one or more entities. A binary relation has a `subject`, typed `predicate`, and `object`; direction matters. Predicates are extensible, with initial examples `owns`, `uses`, `works_for`, `registered_to`, and `mentioned_in`.
 - **FR-CLM-03:** A claim may link several evidence items, each with a `supports/contradicts/context` role. The UI may select an existing preserved item or import a new local file into the current case before creating the link; the exact evidence ID is persisted. When a new claim or relation is given initial status `confirmed`, the desktop UI opens the supporting-evidence step before creation and persists the selected/imported link with the claim. Moving to `confirmed` requires at least one `supports` item and written reasoning. This is a UI safeguard, not proof that the claim is true.
 - **FR-CLM-04:** Changing the status, statement, or evidence links creates a log event. Contradictory items remain attached when the status changes.
-- **FR-CLM-05:** The relation table shows both entities, predicate, status, and counts of supporting and contradicting items. Filter by entity, predicate, or status. An interactive graph is not required for the MVP.
+- **FR-CLM-05:** The investigation graph is the default case workspace and shows isolated and connected entities. Users can create entities from its controls or canvas; canvas-created entities are placed at the requested canvas location. Users can drag nodes to organize them, pan, zoom, search, and fit the view. A toolbar Connect action or node context-menu Add connection starts a visual node selection; clicking a second entity creates a directional relationship after a short predicate prompt. Escape or clicking empty canvas cancels. New graph connections are unverified observations, not verified claims. Relationship context actions inspect, edit the predicate, reverse direction, or remove the underlying relation. Relationship details remain available in the graph inspector for status, reasoning, and multiple evidence links; URLs, text observations, and preserved files are supported. Edge colors and tooltips communicate assessment status. Per-case node positions and view state persist locally across application restarts. The relation table remains available below the graph for search and filtering. Graph actions operate on the ordinary claim/relation records, preserving provenance and verification semantics.
 
 ```mermaid
 stateDiagram-v2
@@ -181,7 +183,7 @@ The arrows illustrate a typical assessment path, **not a restriction on transiti
 ### 5.6. Activity log, notes, and search — FR-LOG
 
 - **FR-LOG-01:** The log automatically records creation, status changes, relation changes/deletions, evidence additions, integrity checks, playbook runs/steps, exports, and imports. An event stores UTC time, type, object ID, action, and readable description.
-- **FR-LOG-02:** Users can add “how I found it” notes with steps, queries, observations, unsuccessful checks, and links to entities or evidence. Failed leads are useful results and must be preserved.
+- **FR-LOG-02:** Users can add “how I found it” notes with steps, queries, observations, and unsuccessful checks. A note may optionally link one entity and one evidence item. Failed leads are useful results and must be preserved.
 - **FR-LOG-03:** Existing log events cannot be edited through the UI; corrections become new events. The MVP provides an in-application activity history, **not a cryptographically tamper-proof audit trail** against the machine's owner.
 - **FR-LOG-04:** Case search covers entity labels, claim text, source URLs, filenames, notes, and technique names; filter by type and date. The top-bar search additionally searches these record types across cases and opens the selected case/record. Full-text indexing inside attached PDFs or images is outside the MVP.
 
@@ -197,12 +199,12 @@ The arrows illustrate a typical assessment path, **not a restriction on transiti
 
 Implementation status: Partial. Core behavior is Implemented; limitations and Planned requirements are listed in the implementation-status record below. Normative requirements are retained and do not become implemented merely because they appear here.
 
-**Top-level navigation:** `Cases`, `Playbooks`, `Settings`. Inside a case: `Overview`, `Entities`, `Claims & Relations`, `Sources & Evidence`, `Notes & Log`, `Playbook Runs`, `Export`. Tables support opening an item, filtering, sorting, and returning to the prior selection.
+**Top-level navigation:** `Cases`, `Playbooks`, `Settings`. Opening a case selects `Investigation Graph` by default. Inside a case: `Overview`, `Entities`, `Investigation Graph`, `Sources & Evidence`, `Notes & Log`, `Playbook Runs`, `Export`. The graph is the primary work surface; the entity and evidence pages remain specialized views. Tables support opening an item, filtering, sorting, and returning to the graph. Evidence can be filtered by text, kind, and source. `Ctrl+K` focuses the cross-case search field. The Linux application starts maximized and uses the supplied Evidence Trace icon in its window and desktop launcher. Case creation requires only a title; purpose is optional, and target, scope, tags, and description are available under collapsed optional details. A claim can be created only after the case has at least one entity; the Overview and Graph actions explain this prerequisite and become available after an entity is added. Returning to Overview refreshes its counts and activity. Logged changes advance the case last-updated timestamp and visible case counts immediately. General settings show the local data directory, per-file size limit, and network boundary; a folder chosen in Settings is used on the next launch. Appearance settings provide accent color, control density, text size, font, and selected case-tab glow; choices are stored locally and applied immediately to active navigation, case tabs, record lists, claim details, and relationship-map colors.
 
 | Screen | Primary actions | Required visible information |
 | --- | --- | --- |
 | Case list | Create, search, archive, open | Title, status, last update. |
-| Case overview | Add entity, claim, or evidence | Purpose, scope, counts, recent activity, unresolved claims. |
+| Case overview | Add entity, claim when an entity exists, or evidence | Purpose, scope, counts, recent activity, unresolved claims. |
 | Entity details | Edit, inspect possible duplicate, follow a relation | Type, value, associated claims and sources. |
 | Claim details | Change status, attach evidence, explain reasoning | Status, rationale, support/contradictions, history. |
 | Evidence details | Preview safely in the application, check SHA-256, open source | URL, import time, filename, hash, linked claims. Unsupported files and external-only URLs have explicit no-execution/no-navigation fallbacks. |
@@ -210,6 +212,38 @@ Implementation status: Partial. Core behavior is Implemented; limitations and Pl
 | Activity log | Filter, add manual entry | Event and time shown consistently as `YYYY-MM-DD HH:MM UTC`. |
 
 Errors and empty states must be specific: “Attach at least one supporting item before marking this claim confirmed,” “File changed or unavailable,” “Import rejected: SHA-256 mismatch.” Forms must warn before discarding unsaved text.
+
+**AC-16:** Create a case using only its required title; the case is created, and purpose plus the remaining metadata can be added later. Optional metadata is collapsed by default for a new case.
+
+**AC-17:** Open a case with no entities; claim actions are disabled with an explanation. Add the first entity; claim actions become available. Delete the last unreferenced entity; claim actions become disabled again.
+
+**AC-18:** Change accent color, control density, text size, and font, and toggle selected case-tab glow; the interface applies the choices immediately and retains them after restart. Reset returns to the system font and default appearance. The preview is visibly marked as non-mutating.
+
+**AC-19:** Change the local data folder in General settings, restart the app with the same settings profile and no command-line folder override, and confirm that the selected folder remains active.
+
+**AC-20:** Add evidence, a claim, a note, or a playbook-run update to an open case. The header shows the latest logged activity time immediately; evidence and entity counts update after relevant changes. The Cases list and Overview show the latest activity, and Runs and Export reload their run/activity summaries when opened after changes elsewhere.
+
+**AC-21:** Create a relation with the default `observation` kind and leave reasoning empty; the relation saves as an unverified observation. Choose `inference` and leave reasoning empty; the UI requests reasoning. Switching between relation and entity-claim modes preserves the selected kind.
+
+**AC-22:** Set an accent in Settings while a case is open, return to Claims & Relations, and confirm navigation, claim table, detail badges, and relationship-map nodes/edges reflect the selected accent.
+
+**AC-23:** Run `relation add CASE_ID --subject ENTITY_ID --predicate PREDICATE --object ENTITY_ID --reasoning TEXT`; the command creates a directional claim and prints `CLAIM_ID`. `evidence-trace help` shows this positional case syntax and the supported export/import options.
+
+**AC-24:** Select a non-first record in a case table, open another case tab, then return; the same record and its detail panel remain selected while the page refreshes its data.
+
+**AC-25:** Install the application with CMake; the GUI executable, desktop launcher, and application icon are installed. The GUI starts maximized and displays the Evidence Trace icon.
+
+**AC-26:** Select a subject and object and enter a predicate in the relation form; the statement is suggested automatically and remains editable. After saving, the new record is selected and its details are visible. The inspector identifies a directional relation as “Relation” and an entity claim as “Claim”.
+
+**AC-27:** In Sources & Evidence, filter by text, evidence kind, and source; only matching evidence remains visible and the selected details match the selected row.
+
+**AC-28:** Press `Ctrl+K`; focus moves to the cross-case search field and a search result can be opened in its case context.
+
+**AC-29:** Apply search, status, type, or entity filters that match no records while records exist; the empty state says no records match and explains how to clear the filters. This applies to Claims & Relations and Entities. In an entity detail panel, the related-claims status badge and statement text do not overlap, the statement column uses the available width, and the full statement remains available through wrapping or a tooltip.
+
+**AC-30:** Verify action icons match their operation: Edit Playbook shows an edit glyph while Run Playbook shows play; claim evidence cards use the evidence kind glyph; Export shows an outward arrow; Event target uses a calendar glyph.
+
+**AC-31:** Link supporting or contradicting evidence from the claim inspector; the inspector and table counts update immediately while the same claim remains selected.
 
 **FR-UI-01:** Every actionable record table in the desktop UI provides a context menu that exposes the supported operation for the selected row: open/view details, edit or update, link evidence, navigation to related records, or a clearly explained copy/correction action for immutable history. Destructive operations require explicit confirmation. The service layer protects referenced records and reports the blocking relationship instead of silently deleting dependent data. Settings and Export screens are command panels rather than record tables and therefore do not require row menus.
 
@@ -257,7 +291,7 @@ erDiagram
 
 Store timestamps in ISO 8601 UTC; the current desktop UI and Markdown report use the explicit convention `YYYY-MM-DD HH:MM UTC` (the underlying values retain ISO-8601 precision). Store `event_time` (when the described event occurred) separately from `captured_at` (when evidence was obtained) and `imported_at` (when it entered the application). If the precise time is unknown, store a date/range and precision indicator; do not invent `00:00`.
 
-The case format includes `schema_version`. Database migrations are sequential and tested against a copy; opening an unknown newer version must not modify files. Create a backup before migration.
+The case format includes `schema_version`. Database migrations are sequential and tested against a copy; opening an unknown newer version must not modify files. Create a backup before migration. Schema v4 adds JSON path references for entity and evidence images; v1–v3 records migrate with empty image lists. Case archive import/export includes the referenced image bytes and remaps their managed paths on import.
 
 ## 8. Architecture and storage
 
@@ -356,11 +390,13 @@ This revision preserves intended requirements and records present gaps; it does 
 | Startup temporary-file cleanup in section 8 | Partial | Current adapters automatically remove .tmp-* material and recover .delete-* quarantine by database ownership. The specified interactive safe-cleanup offer is absent. |
 | Confirmation safeguards | Implemented | Supporting evidence and reasoning are required at creation/status change to confirmed. Later unlink/deletion does not automatically downgrade an existing claim. |
 | Native GUI interaction, unsaved-form warnings, and complete filter/sort coverage | Partial | Historical offscreen rendering is recorded in acceptance.md. Native interaction and these broader workflow requirements remain to be checked. |
-| Focused relationship map | Implemented | GUI displays stored binary relations; no inferred edges. |
+| Investigation graph | Implemented | Graph displays all entities, including isolated nodes; graph controls create entities and directional relations. Relations remain claims with evidence roles and manual statuses. Native interaction remains unverified in the 2026-10-16 environment. |
+| Person identifiers and clipboard images | Partial | Person create form exposes multiple identifier values and managed image attachments; identifiers are first-class typed entities linked by unverified relations. Clipboard capture controls and persistence paths are implemented; native clipboard/dialog interaction remains unverified. |
+| Evidence without files | Implemented | Existing URL/text/file evidence types are accepted as relation support. Graph relation entry can add a URL, text observation, or local file. Multiple evidence links can be added from the relation inspector. |
 | Dedicated timeline, advanced graph tooling, integrations, PDF reports, encryption, localization | Planned | These remain extensions; Ukrainian reference maintenance is frozen. |
 | Quality target in section 10 | Planned | No measured benchmark is claimed. |
 
-The historical verification dates describe the earlier baseline. The current source was inspected during this migration, but no fresh build, screenshot run, performance measurement, or native interaction test is claimed. Remaining requirements must not be removed merely to match implementation.
+The historical verification dates describe the earlier baseline. Current Debug and Release builds, CTest, and selected native GUI journeys are recorded in [acceptance results](acceptance.md). Remaining requirements must not be removed merely to match implementation.
 
 ## 13. References
 

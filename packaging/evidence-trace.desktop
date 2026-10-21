@@ -5,5 +5,5 @@ Comment=Local OSINT investigation workbench
 Exec=evidence-trace-gui
 Icon=evidence-trace
 Terminal=false
-Categories=Utility;Office;
+Categories=Utility;
 StartupWMClass=evidence-trace-gui
