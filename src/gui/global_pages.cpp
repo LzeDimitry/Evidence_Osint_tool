@@ -10,6 +10,9 @@
 #include <QDesktopServices>
 #include <QFileDialog>
 #include <QFrame>
+#include <QFontDatabase>
+#include <QSignalBlocker>
+#include <QSettings>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QGridLayout>
@@ -301,8 +304,13 @@ CasesPage::CasesPage(ApplicationContext& context, QWidget* parent) : QWidget(par
     auto* case_icon = new QLabel;
     case_icon->setFixedSize(45, 45);
     case_icon->setAlignment(Qt::AlignCenter);
-    case_icon->setPixmap(ui_icon(UiIcon::Folder, QColor("#d0baff")).pixmap(QSize(25, 25)));
-    case_icon->setStyleSheet(QStringLiteral("QLabel { background: #24164e; border: 1px solid #6d44d8; border-radius: 9px; }") );
+    const auto case_accent = appearance_accent_color();
+    case_icon->setPixmap(ui_icon(UiIcon::Folder, case_accent.lighter(170)).pixmap(QSize(25, 25)));
+    case_icon->setProperty("accentIconKind", static_cast<int>(UiIcon::Folder));
+    case_icon->setProperty("accentIconSize", QSize(25, 25));
+    case_icon->setProperty("accentSurface", true);
+    case_icon->setStyleSheet(QStringLiteral("QLabel { background: %1; border: 1px solid %2; border-radius: 9px; }")
+        .arg(case_accent.darker(260).name(), case_accent.name()));
     auto* title_copy = new QVBoxLayout;
     title_copy->setContentsMargins(0, 0, 0, 0);
     title_copy->setSpacing(2);
@@ -345,11 +353,13 @@ CasesPage::CasesPage(ApplicationContext& context, QWidget* parent) : QWidget(par
     empty_case_card->hide();
     detail_layout->addWidget(empty_case_card);
 
-    auto make_icon = [](UiIcon kind, const QColor& color) {
+    auto make_icon = [](UiIcon kind, const QColor&) {
         auto* icon = new QLabel;
         icon->setFixedSize(20, 20);
         icon->setAlignment(Qt::AlignCenter);
-        icon->setPixmap(ui_icon(kind, color).pixmap(QSize(18, 18)));
+        icon->setPixmap(ui_icon(kind, appearance_accent_color().lighter(170)).pixmap(QSize(18, 18)));
+        icon->setProperty("accentIconKind", static_cast<int>(kind));
+        icon->setProperty("accentIconSize", QSize(18, 18));
         return icon;
     };
 
@@ -428,7 +438,7 @@ CasesPage::CasesPage(ApplicationContext& context, QWidget* parent) : QWidget(par
         metrics->addWidget(holder, row, column);
     };
     add_metric(UiIcon::Entity, QStringLiteral("Entities"), detail_entities_count_, 0, 0);
-    add_metric(UiIcon::Document, QStringLiteral("Claims"), detail_claims_count_, 0, 1);
+    add_metric(UiIcon::Claim, QStringLiteral("Claims"), detail_claims_count_, 0, 1);
     add_metric(UiIcon::Shield, QStringLiteral("Status"), detail_status_value_, 0, 2);
     add_metric(UiIcon::Activity, QStringLiteral("Last updated"), detail_updated_value_, 1, 0);
     overview_layout->addLayout(metrics);
@@ -510,7 +520,7 @@ CasesPage::CasesPage(ApplicationContext& context, QWidget* parent) : QWidget(par
     split->addWidget(detail_pane_);
     split->setStretchFactor(0, 1);
     split->setStretchFactor(1, 0);
-    split->setSizes({std::max(640, width() - 320), 320});
+    split->setSizes({std::max(640, width() - 440), 440});
     connect(create, &QPushButton::clicked, this, [&] { const auto form = case_form(this); if (!form) return; try { const auto created = context_.cases.create(s(form->title), s(form->purpose), s(form->description), form->target_type ? std::optional<std::string>(s(*form->target_type)) : std::nullopt, s(form->scope), form->tags); refresh(); if (on_open_case) on_open_case(created.id); } catch (const std::exception& error) { show_error(this, error); } });
     connect(open, &QPushButton::clicked, this, &CasesPage::open_selected); connect(table_, &QTableWidget::cellDoubleClicked, this, [this] { open_selected(); }); connect(table_, &QTableWidget::itemSelectionChanged, this, &CasesPage::update_detail); connect(search_, &QLineEdit::textChanged, this, [this] { refresh(); }); connect(status_filter_, &QComboBox::currentIndexChanged, this, [this] { refresh(); });
     connect(archive_button_, &QPushButton::clicked, this, &CasesPage::archive_selected);
@@ -552,7 +562,7 @@ void CasesPage::resizeEvent(QResizeEvent* event) {
         if (auto* list_scroll = findChild<QScrollArea*>(QStringLiteral("casesMainScroll")))
             list_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         if (narrow_page) split->setSizes({380, 320});
-        else split->setSizes({std::max(640, width() - 320), 320});
+        else split->setSizes({std::max(640, width() - 440), 440});
     }
     table_->setMinimumHeight(0);
     const auto narrow = width() < 820;
@@ -599,8 +609,6 @@ void CasesPage::resize_case_preview_rows() {
 
 domain::Id CasesPage::selected_id() const { const auto row = table_->currentRow(); return row < 0 ? domain::Id{} : s(table_->item(row, 0)->data(Qt::UserRole).toString()); }
 
-void CasesPage::set_search(const QString& text) { search_->setText(text); }
-
 void CasesPage::refresh() {
     const auto search = search_->text().trimmed(); const auto values = context_.cases.list(search.isEmpty() ? std::nullopt : std::optional<std::string>(s(search))); const auto all_values = context_.cases.list(); const auto filter = status_filter_->currentData().toString();
     int active_count = 0;
@@ -619,7 +627,7 @@ void CasesPage::refresh() {
         const auto row = table_->rowCount();
         table_->insertRow(row);
         auto* case_item = item(q(value.title), q(value.id));
-        case_item->setIcon(ui_icon(UiIcon::Folder, QColor("#bda5ff")));
+        set_accent_icon(case_item, UiIcon::Folder);
         table_->setItem(row, 0, case_item);
         const auto add_preview = [this, row](int column, const QString& text) {
             // Keep the exact value on the item for tooltips/data access, but
@@ -771,16 +779,16 @@ void CasesPage::update_detail() {
 
 PlaybooksPage::PlaybooksPage(ApplicationContext& context, QWidget* parent) : QWidget(parent), context_(context) {
     auto* root = new QVBoxLayout(this); root->setContentsMargins(28, 24, 28, 24); root->setSpacing(16); auto* new_technique = button(QStringLiteral("＋  New technique"), true); auto* new_playbook = button(QStringLiteral("＋  New playbook")); root->addWidget(page_header(QStringLiteral("Playbooks"), QStringLiteral("Reusable methods are global templates. Case runs keep their own snapshots.")));
-    auto* action_strip = new QWidget; auto* actions = new QBoxLayout(QBoxLayout::LeftToRight, action_strip); actions->setContentsMargins(0, 0, 0, 0); actions->setSpacing(12); auto* create_group = new QGroupBox(QStringLiteral("Create")); auto* create_layout = new QHBoxLayout(create_group); create_layout->setContentsMargins(12, 10, 12, 10); new_technique->setMinimumWidth(155); new_playbook->setMinimumWidth(155); create_layout->addWidget(new_technique); create_layout->addWidget(new_playbook); auto* manage_group = new QGroupBox(QStringLiteral("Manage selected")); auto* manage_layout = new QGridLayout(manage_group); manage_layout->setContentsMargins(12, 10, 12, 10); manage_layout->setHorizontalSpacing(8); manage_layout->setVerticalSpacing(8); auto* edit_technique = button(QStringLiteral("Edit technique")); auto* edit_playbook = button(QStringLiteral("Edit playbook")); auto* add_step = button(QStringLiteral("Add step")); auto* move_up = button(QStringLiteral("Move step ↑")); auto* move_down = button(QStringLiteral("Move step ↓")); edit_technique->setMinimumWidth(130); edit_playbook->setMinimumWidth(130); add_step->setMinimumWidth(130); move_up->setMinimumWidth(130); move_down->setMinimumWidth(130); manage_layout->addWidget(edit_technique, 0, 0); manage_layout->addWidget(edit_playbook, 0, 1); manage_layout->addWidget(add_step, 1, 0); manage_layout->addWidget(move_up, 1, 1); manage_layout->addWidget(move_down, 2, 0); actions->addWidget(create_group); actions->addWidget(manage_group); actions->addStretch(); observe_resize(action_strip, [action_strip, actions](int width) { const auto narrow = width < 1050; actions->setDirection(narrow ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight); action_strip->setMinimumHeight(narrow ? 315 : 0); action_strip->updateGeometry(); }); root->addWidget(action_strip);
+    auto* action_strip = new QWidget; auto* actions = new QBoxLayout(QBoxLayout::LeftToRight, action_strip); actions->setContentsMargins(0, 0, 0, 0); actions->setSpacing(12); auto* create_group = new QGroupBox(QStringLiteral("Create")); auto* create_layout = new QHBoxLayout(create_group); create_layout->setContentsMargins(12, 10, 12, 10); new_technique->setMinimumWidth(155); new_playbook->setMinimumWidth(155); create_layout->addWidget(new_technique); create_layout->addWidget(new_playbook); auto* manage_group = new QGroupBox(QStringLiteral("Manage selected")); auto* manage_layout = new QGridLayout(manage_group); manage_layout->setContentsMargins(12, 10, 12, 10); manage_layout->setHorizontalSpacing(8); manage_layout->setVerticalSpacing(8); edit_technique_button_ = button(QStringLiteral("Edit technique")); edit_playbook_button_ = button(QStringLiteral("Edit playbook")); add_step_button_ = button(QStringLiteral("Add step")); move_step_up_button_ = button(QStringLiteral("Move step ↑")); move_step_down_button_ = button(QStringLiteral("Move step ↓")); edit_technique_button_->setMinimumWidth(130); edit_playbook_button_->setMinimumWidth(130); add_step_button_->setMinimumWidth(130); move_step_up_button_->setMinimumWidth(130); move_step_down_button_->setMinimumWidth(130); manage_layout->addWidget(edit_technique_button_, 0, 0); manage_layout->addWidget(edit_playbook_button_, 0, 1); manage_layout->addWidget(add_step_button_, 1, 0); manage_layout->addWidget(move_step_up_button_, 1, 1); manage_layout->addWidget(move_step_down_button_, 2, 0); actions->addWidget(create_group); actions->addWidget(manage_group); actions->addStretch(); observe_resize(action_strip, [action_strip, actions](int width) { const auto narrow = width < 1050; actions->setDirection(narrow ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight); action_strip->setMinimumHeight(narrow ? 315 : 0); action_strip->updateGeometry(); }); root->addWidget(action_strip);
     auto* tabs = new QTabWidget; auto* template_page = new QWidget; auto* template_layout = new QVBoxLayout(template_page); template_layout->setContentsMargins(0, 0, 0, 0); auto* template_split = responsive_splitter(); auto* left = new QSplitter(Qt::Vertical); playbooks_ = table_with_empty_state(); configure_table(playbooks_, {"Playbook", "Scope", "Updated"}); stretch_table_columns(playbooks_); set_empty_state(playbooks_, QStringLiteral("No playbooks yet"), QStringLiteral("Create a reusable method for future case runs.")); techniques_ = table_with_empty_state(); configure_table(techniques_, {"Technique", "Objective", "Updated"}); stretch_table_columns(techniques_); set_empty_state(techniques_, QStringLiteral("No techniques yet"), QStringLiteral("Techniques become reusable steps inside your playbooks.")); left->addWidget(playbooks_); left->addWidget(techniques_); left->setStretchFactor(0, 1); left->setStretchFactor(1, 1); template_split->addWidget(left);
     auto* details = card(); auto* details_layout = new QVBoxLayout(details); details_layout->setContentsMargins(24, 22, 24, 22); playbook_title_ = heading(QStringLiteral("Select a template"), 21); playbook_description_ = muted(QStringLiteral("Global playbooks and techniques are stored independently of cases.")); technique_title_ = heading(QStringLiteral(""), 18); technique_body_ = muted(QStringLiteral("")); steps_ = table_with_empty_state(); configure_table(steps_, {"#", "Step", "Instructions"}); stretch_table_columns(steps_); set_empty_state(steps_, QStringLiteral("No steps in this playbook"), QStringLiteral("Add an ordered step or select a technique to build the method.")); details_layout->addWidget(playbook_title_); details_layout->addWidget(playbook_description_); details_layout->addSpacing(18); details_layout->addWidget(technique_title_); details_layout->addWidget(technique_body_); details_layout->addSpacing(18); details_layout->addWidget(steps_, 1); template_split->addWidget(details); template_layout->addWidget(template_split); tabs->addTab(template_page, QStringLiteral("Templates")); root->addWidget(tabs, 1);
     connect(new_technique, &QPushButton::clicked, this, [this] { const auto form = technique_form(this); if (!form) return; try { context_.playbooks.create_technique(s(form->name), s(form->objective), s(form->steps), s(form->example_queries_json), s(form->tools_links_json), s(form->limitations), s(form->tags_json)); refresh(); } catch (const std::exception& error) { show_error(this, error); } });
     connect(new_playbook, &QPushButton::clicked, this, [this] { const auto form = playbook_form(this); if (!form) return; try { context_.playbooks.create_playbook(s(form->name), s(form->scope), s(form->description)); refresh(); } catch (const std::exception& error) { show_error(this, error); } });
-    connect(playbooks_, &QTableWidget::itemSelectionChanged, this, &PlaybooksPage::update_playbook_detail); connect(techniques_, &QTableWidget::itemSelectionChanged, this, &PlaybooksPage::update_technique_detail);
-    connect(edit_technique, &QPushButton::clicked, this, &PlaybooksPage::edit_selected_technique);
-    connect(edit_playbook, &QPushButton::clicked, this, &PlaybooksPage::edit_selected_playbook);
-    connect(add_step, &QPushButton::clicked, this, &PlaybooksPage::add_step_to_selected_playbook);
-    connect(move_up, &QPushButton::clicked, this, [this] { move_selected_step(-1); }); connect(move_down, &QPushButton::clicked, this, [this] { move_selected_step(1); });
+    connect(playbooks_, &QTableWidget::itemSelectionChanged, this, &PlaybooksPage::update_playbook_detail); connect(techniques_, &QTableWidget::itemSelectionChanged, this, &PlaybooksPage::update_technique_detail); connect(steps_, &QTableWidget::itemSelectionChanged, this, &PlaybooksPage::update_action_state);
+    connect(edit_technique_button_, &QPushButton::clicked, this, &PlaybooksPage::edit_selected_technique);
+    connect(edit_playbook_button_, &QPushButton::clicked, this, &PlaybooksPage::edit_selected_playbook);
+    connect(add_step_button_, &QPushButton::clicked, this, &PlaybooksPage::add_step_to_selected_playbook);
+    connect(move_step_up_button_, &QPushButton::clicked, this, [this] { move_selected_step(-1); }); connect(move_step_down_button_, &QPushButton::clicked, this, [this] { move_selected_step(1); });
     playbooks_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(playbooks_, &QTableWidget::customContextMenuRequested, this, [this](const QPoint& position) {
         const auto index = playbooks_->indexAt(position);
@@ -892,159 +900,193 @@ void PlaybooksPage::refresh() {
     techniques_->setRowCount(0); for (const auto& value : context_.playbooks.list_techniques()) { const auto row = techniques_->rowCount(); techniques_->insertRow(row); techniques_->setItem(row, 0, item(q(value.name), q(value.id))); techniques_->setItem(row, 1, item(q(value.objective))); techniques_->setItem(row, 2, item(display_time(value.updated_at))); }
     if (playbooks_->rowCount() > 0) playbooks_->selectRow(0);
     if (techniques_->rowCount() > 0) techniques_->selectRow(0);
-    update_playbook_detail(); update_technique_detail();
+    update_playbook_detail(); update_technique_detail(); update_action_state();
 }
+
+void PlaybooksPage::update_action_state() { const bool has_playbook = playbooks_->currentRow() >= 0; const bool has_technique = techniques_->currentRow() >= 0; const int step_row = steps_->currentRow(); edit_playbook_button_->setEnabled(has_playbook); edit_technique_button_->setEnabled(has_technique); add_step_button_->setEnabled(has_playbook); move_step_up_button_->setEnabled(has_playbook && step_row > 0); move_step_down_button_->setEnabled(has_playbook && step_row >= 0 && step_row + 1 < steps_->rowCount()); }
 
 void PlaybooksPage::move_selected_step(int delta) { const auto playbook_row = playbooks_->currentRow(); const auto step_row = steps_->currentRow(); if (playbook_row < 0 || step_row < 0) return; try { const auto playbook_id = s(playbooks_->item(playbook_row, 0)->data(Qt::UserRole).toString()); const auto steps = context_.playbooks.list_playbook_steps(playbook_id); if (step_row >= static_cast<int>(steps.size())) return; const auto new_position = steps[static_cast<std::size_t>(step_row)].position + delta; if (new_position < 0 || new_position >= static_cast<std::int64_t>(steps.size())) return; context_.playbooks.move_playbook_step(steps[static_cast<std::size_t>(step_row)].id, new_position); refresh(); } catch (const std::exception& error) { show_error(this, error); } }
 
-void PlaybooksPage::update_playbook_detail() {
-    const auto row = playbooks_->currentRow(); steps_->setRowCount(0); if (row < 0) { playbook_title_->setText(QStringLiteral("Select a template")); playbook_description_->setText(QStringLiteral("Global playbooks and techniques are stored independently of cases.")); return; } try { const auto value = context_.playbooks.get_playbook(s(playbooks_->item(row, 0)->data(Qt::UserRole).toString())); playbook_title_->setText(q(value.name)); playbook_description_->setText(QStringLiteral("%1\n\nScope: %2").arg(q(value.description), q(value.scope.empty() ? "Not specified" : value.scope))); for (const auto& step : context_.playbooks.list_playbook_steps(value.id)) { const auto line = steps_->rowCount(); steps_->insertRow(line); steps_->setItem(line, 0, item(QString::number(step.position + 1))); steps_->setItem(line, 1, item(q(step.name), q(step.id))); steps_->setItem(line, 2, item(q(step.instructions))); } } catch (...) { }
-}
+void PlaybooksPage::update_playbook_detail() { const auto row = playbooks_->currentRow(); steps_->setRowCount(0); if (row < 0) { playbook_title_->setText(QStringLiteral("Select a template")); playbook_description_->setText(QStringLiteral("Global playbooks and techniques are stored independently of cases.")); update_action_state(); return; } try { const auto value = context_.playbooks.get_playbook(s(playbooks_->item(row, 0)->data(Qt::UserRole).toString())); playbook_title_->setText(q(value.name)); playbook_description_->setText(QStringLiteral("%1\n\nScope: %2").arg(q(value.description), q(value.scope.empty() ? "Not specified" : value.scope))); for (const auto& step : context_.playbooks.list_playbook_steps(value.id)) { const auto line = steps_->rowCount(); steps_->insertRow(line); steps_->setItem(line, 0, item(QString::number(step.position + 1))); steps_->setItem(line, 1, item(q(step.name), q(step.id))); steps_->setItem(line, 2, item(q(step.instructions))); } } catch (const std::exception& error) { show_error(this, error); } update_action_state(); }
 
-void PlaybooksPage::update_technique_detail() { const auto row = techniques_->currentRow(); if (row < 0) { technique_title_->clear(); technique_body_->clear(); return; } try { const auto value = context_.playbooks.get_technique(s(techniques_->item(row, 0)->data(Qt::UserRole).toString())); technique_title_->setText(q(value.name)); technique_body_->setText(QStringLiteral("%1\n\nInstructions\n%2\n\nLimitations\n%3").arg(q(value.objective), q(value.steps), q(value.limitations.empty() ? "Not specified" : value.limitations))); } catch (...) { } }
+void PlaybooksPage::update_technique_detail() { const auto row = techniques_->currentRow(); if (row < 0) { technique_title_->clear(); technique_body_->clear(); update_action_state(); return; } try { const auto value = context_.playbooks.get_technique(s(techniques_->item(row, 0)->data(Qt::UserRole).toString())); technique_title_->setText(q(value.name)); technique_body_->setText(QStringLiteral("%1\n\nInstructions\n%2\n\nLimitations\n%3").arg(q(value.objective), q(value.steps), q(value.limitations.empty() ? "Not specified" : value.limitations))); } catch (const std::exception& error) { show_error(this, error); } update_action_state(); }
 
 SettingsPage::SettingsPage(ApplicationContext& context, QWidget* parent) : QWidget(parent), context_(context) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(28, 24, 28, 24);
     root->setSpacing(16);
-    root->addWidget(page_header(QStringLiteral("Settings"), QStringLiteral("Configure the local environment and application boundaries.")));
+    root->addWidget(page_header(QStringLiteral("Settings"), QStringLiteral("Adjust how the app looks and where it stores your cases.")));
 
-    auto* content = new QWidget;
-    content->setMaximumWidth(1500);
-    content->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    columns_ = new QBoxLayout(QBoxLayout::LeftToRight, content);
-    auto* columns = columns_;
-    columns->setContentsMargins(0, 0, 0, 0);
-    columns->setSpacing(16);
+    auto* tabs = new QTabWidget;
+    auto* general_page = new QWidget;
+    auto* general_layout = new QVBoxLayout(general_page);
+    general_layout->setContentsMargins(18, 18, 18, 18);
+    general_layout->setSpacing(14);
 
-    auto* left = new QVBoxLayout;
-    left->setSpacing(16);
     auto* storage = card();
-    storage->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     auto* storage_layout = new QVBoxLayout(storage);
     storage_layout->setContentsMargins(20, 18, 20, 18);
-    storage_layout->addWidget(heading(QStringLiteral("Local data directory"), 18));
-    storage_layout->addWidget(muted(QStringLiteral("Cases, SQLite metadata, preserved evidence, and temporary import files stay on this device.")));
-    auto* row = new QHBoxLayout;
+    storage_layout->setSpacing(10);
+    storage_layout->addWidget(heading(QStringLiteral("Case storage"), 18));
+    storage_layout->addWidget(muted(QStringLiteral("Your cases, evidence, and files are saved on this device.")));
+    auto* path_row = new QHBoxLayout;
     data_directory_ = new QLineEdit(q(context_.data_directory.string()));
     data_directory_->setReadOnly(true);
     data_directory_->setCursorPosition(0);
     data_directory_->setToolTip(q(context_.data_directory.string()));
-    auto* change = button(QStringLiteral("Change…"), true);
+    auto* change = button(QStringLiteral("Change folder…"), true);
     auto* open = button(QStringLiteral("Open folder"));
-    row->addWidget(data_directory_, 1);
-    row->addWidget(change);
-    row->addWidget(open);
-    storage_layout->addLayout(row);
-    left->addWidget(storage);
+    path_row->addWidget(data_directory_, 1);
+    path_row->addWidget(change);
+    path_row->addWidget(open);
+    storage_layout->addLayout(path_row);
+    general_layout->addWidget(storage);
 
-    auto* policy = card();
-    policy->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    auto* policy_layout = new QFormLayout(policy);
-    policy_layout->setContentsMargins(20, 18, 20, 18);
-    policy_layout->setVerticalSpacing(12);
-    policy_layout->addRow(QStringLiteral("Database schema"), new QLabel(QStringLiteral("Version %1").arg(database::current_schema_version)));
-    policy_layout->addRow(QStringLiteral("Attachment limit"), new QLabel(display_bytes(context_.store.max_file_size()) + QStringLiteral(" per file")));
-    policy_layout->addRow(QStringLiteral("Network / telemetry"), new QLabel(QStringLiteral("Disabled in the MVP")));
-    policy_layout->addRow(QStringLiteral("Ukrainian localization"), new QLabel(QStringLiteral("Planned — English strings are externalizable")));
-    left->addWidget(policy);
-
-    auto* right = new QVBoxLayout;
-    right->setSpacing(16);
-    auto* recovery = card();
-    recovery->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    auto* recovery_layout = new QVBoxLayout(recovery);
-    recovery_layout->setContentsMargins(20, 18, 20, 18);
-    recovery_layout->addWidget(heading(QStringLiteral("Recovery and error states"), 18));
-    recovery_layout->addWidget(muted(QStringLiteral("Integrity mismatches, unsafe archive paths, and malformed imports are rejected with specific messages. Existing data is left unchanged when validation fails.")));
-    auto* recovery_note = new QLabel(QStringLiteral("Validation happens before import. A failed archive never partially changes the case database."));
-    recovery_note->setWordWrap(true);
-    recovery_note->setStyleSheet(QStringLiteral("QLabel { color: #c5b6ff; background: #17112f; border: 1px solid #4e3a8b; border-radius: 8px; padding: 12px; }"));
-    recovery_layout->addWidget(recovery_note);
-    right->addWidget(recovery);
-
-    auto* boundaries = card();
-    boundaries->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    auto* boundaries_layout = new QVBoxLayout(boundaries);
-    boundaries_layout->setContentsMargins(20, 18, 20, 18);
-    boundaries_layout->addWidget(heading(QStringLiteral("Workspace boundaries"), 18));
-    boundaries_layout->addWidget(muted(QStringLiteral("Evidence stays local-first. Files are preserved under the selected data directory and are never executed by the application preview.")));
-    right->addWidget(boundaries);
-    right->addStretch();
-
-    columns->addLayout(left, 1);
-    columns->addLayout(right, 1);
-    columns->setAlignment(left, Qt::AlignTop);
-    columns->setAlignment(right, Qt::AlignTop);
-    auto* content_scroll = new QScrollArea;
-    content_scroll->setFrameShape(QFrame::NoFrame);
-    content_scroll->setWidgetResizable(true);
-    content_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    content_scroll->setWidget(content);
-    auto* tabs = new QTabWidget;
-    tabs->addTab(content_scroll, QStringLiteral("General"));
-    tabs->setTabIcon(0, ui_icon(UiIcon::Settings, QColor("#bd9fff")));
-    const auto add_placeholder_tab = [tabs](const QString& name) {
-        auto* page = new QWidget;
-        auto* page_layout = new QVBoxLayout(page);
-        page_layout->setContentsMargins(18, 18, 18, 18);
-        page_layout->addWidget(muted(QStringLiteral("%1 settings are available through the local-first workspace controls.").arg(name)));
-        page_layout->addStretch();
-        tabs->addTab(page, name);
-    };
-    add_placeholder_tab(QStringLiteral("Data"));
+    auto* general = card();
+    auto* general_form = new QFormLayout(general);
+    general_form->setContentsMargins(20, 18, 20, 18);
+    general_form->setVerticalSpacing(12);
+    general_form->addRow(QStringLiteral("File size limit"), new QLabel(display_bytes(context_.store.max_file_size()) + QStringLiteral(" per file")));
+    general_form->addRow(QStringLiteral("Network access"), new QLabel(QStringLiteral("Disabled; case data stays local")));
+    general_layout->addWidget(general);
+    general_layout->addStretch();
+    tabs->addTab(general_page, ui_icon(UiIcon::Settings, QColor("#bd9fff")), QStringLiteral("General"));
 
     auto* appearance_page = new QWidget;
     auto* appearance_layout = new QVBoxLayout(appearance_page);
     appearance_layout->setContentsMargins(18, 18, 18, 18);
-    auto* navigation_appearance = card();
-    auto* navigation_appearance_layout = new QVBoxLayout(navigation_appearance);
-    navigation_appearance_layout->setContentsMargins(20, 18, 20, 18);
-    navigation_appearance_layout->setSpacing(10);
-    navigation_appearance_layout->addWidget(heading(QStringLiteral("Navigation appearance"), 18));
-    navigation_appearance_layout->addWidget(muted(QStringLiteral("Choose whether the selected case tab casts a soft purple glow into the page below.")));
-    auto* glow_row = new QWidget(navigation_appearance);
-    auto* glow_layout = new QHBoxLayout(glow_row);
-    glow_layout->setContentsMargins(0, 4, 0, 0);
-    auto* glow_toggle = new QCheckBox(QStringLiteral("Enable projector-style tab glow"), glow_row);
-    glow_toggle->setChecked(navigation_glow_enabled());
-    glow_toggle->setToolTip(QStringLiteral("Show or hide the soft light below the selected case tab."));
-    auto* glow_state = new QLabel(glow_toggle->isChecked() ? QStringLiteral("ON") : QStringLiteral("OFF"), glow_row);
-    glow_state->setAlignment(Qt::AlignCenter);
-    glow_state->setMinimumWidth(46);
-    glow_state->setStyleSheet(glow_toggle->isChecked()
-        ? QStringLiteral("QLabel { color:#d5c4ff; background:#24164e; border:1px solid #7544df; border-radius:5px; padding:3px 8px; font-weight:700; }")
-        : QStringLiteral("QLabel { color:#9baac2; background:#111a27; border:1px solid #2a3a50; border-radius:5px; padding:3px 8px; font-weight:700; }"));
-    glow_layout->addWidget(glow_toggle);
-    glow_layout->addStretch();
-    glow_layout->addWidget(glow_state);
-    navigation_appearance_layout->addWidget(glow_row);
-    appearance_layout->addWidget(navigation_appearance);
+    appearance_layout->setSpacing(14);
+    auto* appearance = card();
+    auto* appearance_form = new QFormLayout(appearance);
+    appearance_form->setContentsMargins(20, 18, 20, 18);
+    appearance_form->setVerticalSpacing(14);
+
+    QSettings settings;
+    auto* accent = enum_combo(appearance, {"Violet", "Blue", "Teal", "Amber"}, {"Violet", "Blue", "Teal", "Amber"});
+    const auto saved_accent = settings.value(QStringLiteral("appearance/accent"), QStringLiteral("Violet")).toString();
+    accent->setCurrentIndex(std::max(0, accent->findData(saved_accent)));
+    appearance_form->addRow(QStringLiteral("Accent color"), accent);
+
+    auto* density = enum_combo(appearance, {"Comfortable", "Compact"}, {"Comfortable", "Compact"});
+    density->setCurrentIndex(std::max(0, density->findData(settings.value(QStringLiteral("appearance/density"), QStringLiteral("Comfortable")).toString())));
+    appearance_form->addRow(QStringLiteral("Control density"), density);
+
+    auto* text_size = enum_combo(appearance, {"Small", "Standard", "Large"}, {"Small", "Standard", "Large"});
+    text_size->setCurrentIndex(std::max(0, text_size->findData(settings.value(QStringLiteral("appearance/textSize"), QStringLiteral("Standard")).toString())));
+    appearance_form->addRow(QStringLiteral("Text size"), text_size);
+
+    auto* font = new QComboBox(appearance);
+    font->setMaxVisibleItems(8);
+    font->setToolTip(QStringLiteral("Choose a readable font for the interface."));
+    font->addItem(QStringLiteral("System default"), QString());
+    const auto available_families = QFontDatabase().families();
+    const auto saved_font = settings.value(QStringLiteral("appearance/fontFamily")).toString();
+    QStringList font_choices;
+    for (const auto& preferred : {QStringLiteral("Noto Sans"), QStringLiteral("DejaVu Sans"), QStringLiteral("Liberation Sans"), QStringLiteral("Ubuntu"), QStringLiteral("Cantarell"), QStringLiteral("Inter")}) {
+        for (const auto& available : available_families) {
+            if (available.compare(preferred, Qt::CaseInsensitive) == 0 && !font_choices.contains(available)) {
+                font_choices.push_back(available);
+                break;
+            }
+        }
+    }
+    const auto system_font_family = QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
+    if (!system_font_family.isEmpty() && !font_choices.contains(system_font_family)) font_choices.push_back(system_font_family);
+    if (!saved_font.isEmpty() && !font_choices.contains(saved_font)) font_choices.push_back(saved_font);
+    for (const auto& family : font_choices) font->addItem(family, family);
+    font->setCurrentIndex(std::max(0, font->findData(saved_font)));
+    appearance_form->addRow(QStringLiteral("Font"), font);
+
+    auto* glow = new QCheckBox(QStringLiteral("Highlight the selected case tab with a glow"), appearance);
+    glow->setChecked(navigation_glow_enabled());
+    glow->setToolTip(QStringLiteral("Adds a soft light below the selected case tab."));
+    appearance_form->addRow(QString(), glow);
+
+    auto* preview = new QWidget(appearance);
+    auto* preview_layout = new QHBoxLayout(preview);
+    preview_layout->setContentsMargins(12, 8, 12, 8);
+    auto* preview_copy = new QVBoxLayout;
+    auto* preview_title = heading(QStringLiteral("Case overview"), 14);
+    preview_copy->addWidget(preview_title);
+    preview_copy->addWidget(muted(QStringLiteral("Example layout · appearance settings apply to the interface")));
+    auto* preview_action = button(QStringLiteral("Add evidence"), true);
+    preview_action->setEnabled(false);
+    preview_action->setToolTip(QStringLiteral("Sample control; it does not add evidence to a case."));
+    preview_action->setAccessibleDescription(QStringLiteral("Non-interactive sample control; no case data is changed."));
+    preview_layout->addLayout(preview_copy, 1);
+    preview_layout->addWidget(preview_action);
+    preview->setObjectName(QStringLiteral("appearancePreview"));
+    preview->setStyleSheet(QStringLiteral("QWidget#appearancePreview { background:#101a29; border:1px solid %1; border-radius:7px; }")
+        .arg(appearance_accent_color().darker(145).name()));
+    appearance_form->addRow(QStringLiteral("Sample panel"), preview);
+    appearance_layout->addWidget(appearance);
+    auto* reset = button(QStringLiteral("Restore appearance defaults"));
+    appearance_layout->addWidget(reset, 0, Qt::AlignLeft);
     appearance_layout->addStretch();
-    tabs->addTab(appearance_page, QStringLiteral("Appearance"));
-    connect(glow_toggle, &QCheckBox::toggled, this, [this, glow_state](bool enabled) {
-        set_navigation_glow_enabled(enabled);
-        glow_state->setText(enabled ? QStringLiteral("ON") : QStringLiteral("OFF"));
-        glow_state->setStyleSheet(enabled
-            ? QStringLiteral("QLabel { color:#d5c4ff; background:#24164e; border:1px solid #7544df; border-radius:5px; padding:3px 8px; font-weight:700; }")
-            : QStringLiteral("QLabel { color:#9baac2; background:#111a27; border:1px solid #2a3a50; border-radius:5px; padding:3px 8px; font-weight:700; }"));
-        if (on_navigation_glow_changed) on_navigation_glow_changed(enabled);
+    tabs->addTab(appearance_page, ui_icon(UiIcon::Eye, QColor("#aebbd2")), QStringLiteral("Appearance"));
+
+    const auto refresh_settings_tab_icons = [tabs] {
+        const auto accent_icon = appearance_accent_color().lighter(170);
+        tabs->setTabIcon(0, ui_icon(UiIcon::Settings, tabs->currentIndex() == 0 ? accent_icon : QColor("#aebbd2")));
+        tabs->setTabIcon(1, ui_icon(UiIcon::Eye, tabs->currentIndex() == 1 ? accent_icon : QColor("#aebbd2")));
+    };
+    refresh_settings_tab_icons();
+    connect(tabs, &QTabWidget::currentChanged, this, [refresh_settings_tab_icons](int) {
+        refresh_settings_tab_icons();
     });
 
-    add_placeholder_tab(QStringLiteral("Shortcuts"));
-    add_placeholder_tab(QStringLiteral("About"));
-    tabs->setTabIcon(1, ui_icon(UiIcon::Folder, QColor("#aebbd2")));
-    tabs->setTabIcon(2, ui_icon(UiIcon::Eye, QColor("#aebbd2")));
-    tabs->setTabIcon(3, ui_icon(UiIcon::Clipboard, QColor("#aebbd2")));
-    tabs->setTabIcon(4, ui_icon(UiIcon::Info, QColor("#aebbd2")));
+    const auto apply_appearance = [this, refresh_settings_tab_icons, preview] {
+        if (auto* application = qobject_cast<QApplication*>(QApplication::instance())) apply_user_appearance(*application);
+        const auto accent_color = appearance_accent_color();
+        preview->setStyleSheet(QStringLiteral("QWidget#appearancePreview { background:#101a29; border:1px solid %1; border-radius:7px; }")
+            .arg(accent_color.darker(145).name()));
+        refresh_settings_tab_icons();
+        if (on_appearance_changed) on_appearance_changed();
+    };
+    connect(accent, &QComboBox::currentIndexChanged, this, [accent, apply_appearance](int) {
+        QSettings().setValue(QStringLiteral("appearance/accent"), accent->currentData().toString());
+        apply_appearance();
+    });
+    connect(density, &QComboBox::currentIndexChanged, this, [density, apply_appearance](int) {
+        QSettings().setValue(QStringLiteral("appearance/density"), density->currentData().toString());
+        apply_appearance();
+    });
+    connect(text_size, &QComboBox::currentIndexChanged, this, [text_size, apply_appearance](int) {
+        QSettings().setValue(QStringLiteral("appearance/textSize"), text_size->currentData().toString());
+        apply_appearance();
+    });
+    connect(font, qOverload<int>(&QComboBox::currentIndexChanged), this, [font, apply_appearance](int) {
+        QSettings().setValue(QStringLiteral("appearance/fontFamily"), font->currentData().toString());
+        apply_appearance();
+    });
+    connect(glow, &QCheckBox::toggled, this, [this](bool enabled) {
+        set_navigation_glow_enabled(enabled);
+        if (on_navigation_glow_changed) on_navigation_glow_changed(enabled);
+    });
+    connect(reset, &QPushButton::clicked, this, [accent, density, text_size, font, glow, apply_appearance] {
+        QSettings settings;
+        settings.remove(QStringLiteral("appearance/accent"));
+        settings.remove(QStringLiteral("appearance/density"));
+        settings.remove(QStringLiteral("appearance/textSize"));
+        settings.remove(QStringLiteral("appearance/fontFamily"));
+        settings.remove(QStringLiteral("appearance/navigationGlow"));
+        accent->setCurrentIndex(0);
+        density->setCurrentIndex(0);
+        text_size->setCurrentIndex(1);
+        { const QSignalBlocker blocker(font); font->setCurrentIndex(0); }
+        glow->setChecked(false);
+        apply_appearance();
+    });
+
     root->addWidget(tabs, 1);
-    QTimer::singleShot(0, this, [this] { if (columns_) columns_->setDirection(width() < 1100 ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight); });
-    connect(change, &QPushButton::clicked, this, [this] { const auto selected = QFileDialog::getExistingDirectory(this, QStringLiteral("Choose local data directory"), data_directory_->text()); if (selected.isEmpty()) return; data_directory_->setText(selected); if (on_data_directory_requested) on_data_directory_requested(std::filesystem::path(s(selected))); }); connect(open, &QPushButton::clicked, this, [this] { QDesktopServices::openUrl(QUrl::fromLocalFile(data_directory_->text())); });
+    connect(change, &QPushButton::clicked, this, [this] {
+        const auto selected = QFileDialog::getExistingDirectory(this, QStringLiteral("Choose local data directory"), data_directory_->text());
+        if (selected.isEmpty()) return;
+        const auto requested_path = std::filesystem::path(s(selected));
+        const auto request_change = on_data_directory_requested;
+        if (request_change) (void)request_change(requested_path);
+        else data_directory_->setText(q(std::filesystem::absolute(requested_path).string()));
+    });
+    connect(open, &QPushButton::clicked, this, [this] { QDesktopServices::openUrl(QUrl::fromLocalFile(data_directory_->text())); });
 }
-
-void SettingsPage::resizeEvent(QResizeEvent* event) {
-    QWidget::resizeEvent(event);
-    if (columns_) columns_->setDirection(width() < 1100 ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
-}
-
 } // namespace evidence_trace::gui

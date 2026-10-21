@@ -11,18 +11,24 @@ domain::Id EventLogger::record(const domain::Id& case_id,
                                const std::string& description,
                                const std::string& payload_json) {
     const auto id = domain::new_id();
+    const auto occurred_at = domain::utc_now();
     auto statement = database_.prepare(
         "INSERT INTO log_events(id, case_id, occurred_at, action, object_type, object_id, description, payload_json) "
         "VALUES(?, ?, ?, ?, ?, ?, ?, ?);");
     statement.bind(1, id);
     statement.bind(2, case_id);
-    statement.bind(3, domain::utc_now());
+    statement.bind(3, occurred_at);
     statement.bind(4, action);
     statement.bind(5, object_type);
     statement.bind(6, object_id);
     statement.bind(7, description);
     statement.bind(8, payload_json);
     statement.step();
+    auto touch_case = database_.prepare("UPDATE cases SET updated_at = ? WHERE id = ? AND updated_at < ?;");
+    touch_case.bind(1, occurred_at);
+    touch_case.bind(2, case_id);
+    touch_case.bind(3, occurred_at);
+    touch_case.step();
     return id;
 }
 

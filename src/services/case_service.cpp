@@ -65,6 +65,20 @@ domain::Case read_case(database::Statement& statement, int offset = 0) {
     return value;
 }
 
+std::vector<std::string> json_string_array(const std::string& json) {
+    std::vector<std::string> values;
+    std::string current;
+    bool in_string = false, escaped = false;
+    for (const char ch : json) {
+        if (!in_string) { if (ch == '"') { in_string = true; current.clear(); } continue; }
+        if (escaped) { current += ch; escaped = false; }
+        else if (ch == '\\') escaped = true;
+        else if (ch == '"') { values.push_back(current); in_string = false; }
+        else current += ch;
+    }
+    return values;
+}
+
 } // namespace
 
 std::string CaseService::tags_to_json(const std::vector<std::string>& tags) {
@@ -215,6 +229,12 @@ void CaseService::delete_case(const domain::Id& id, storage::AttachmentStore& at
             if (relative_path != expected_path) {
                 throw std::invalid_argument("Refusing to delete case: evidence attachment path is not owned by its evidence record");
             }
+            attachments.push_back({relative_path, attachment_store.stage_removal(relative_path)});
+        }
+        auto images = database_.prepare("SELECT image_paths_json FROM evidence WHERE case_id = ? UNION ALL SELECT image_paths_json FROM entities WHERE case_id = ?;");
+        images.bind(1, id); images.bind(2, id);
+        while (images.step()) for (const auto& image_path : json_string_array(images.column_text(0))) {
+            const auto relative_path = std::filesystem::path(image_path);
             attachments.push_back({relative_path, attachment_store.stage_removal(relative_path)});
         }
     } catch (...) {

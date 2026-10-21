@@ -35,7 +35,10 @@ public:
                        const std::string& original_value,
                        const std::string& details_json,
                        const std::vector<std::string>& tags,
-                       const std::vector<std::string>& aliases);
+                       const std::vector<std::string>& aliases,
+                       std::optional<domain::EntityType> new_type = std::nullopt);
+    domain::Entity add_entity_image(const domain::Id& id, const std::filesystem::path& image);
+    void remove_entity_image(const domain::Id& id, const std::string& relative_path);
     void delete_entity(const domain::Id& id, bool explicit_confirmation);
     std::vector<domain::Entity> list_entities(const domain::Id& case_id) const;
     domain::Entity get_entity(const domain::Id& id) const;
@@ -74,6 +77,8 @@ public:
                                       const std::optional<domain::Id>& source_id = std::nullopt,
                                       const std::string& note = {},
                                       const std::string& captured_at = {});
+    domain::Evidence add_evidence_image(const domain::Id& id, const std::filesystem::path& image);
+    void remove_evidence_image(const domain::Id& id, const std::string& relative_path);
     domain::Evidence get_evidence(const domain::Id& id) const;
     std::vector<domain::Evidence> list_evidence(const domain::Id& case_id) const;
     domain::IntegrityResult verify_evidence(const domain::Id& id) const;
@@ -113,6 +118,11 @@ public:
                              const std::string& explanation,
                              const std::optional<std::string>& new_reasoning = std::nullopt);
     void change_claim_statement(const domain::Id& claim_id, const std::string& statement);
+    void change_relation_predicate(const domain::Id& claim_id, const std::string& predicate);
+    void reverse_relation(const domain::Id& claim_id);
+    void restore_relation(const domain::Claim& claim,
+                          const std::vector<domain::ClaimEntityLink>& entity_links,
+                          const std::vector<domain::ClaimEvidenceLink>& evidence_links);
     void delete_claim(const domain::Id& id, bool explicit_confirmation);
 
     domain::Note add_note(const domain::Id& case_id,
@@ -121,6 +131,8 @@ public:
                           const std::vector<domain::Id>& entity_ids = {},
                           const std::vector<domain::Id>& evidence_ids = {});
     std::vector<domain::Note> list_notes(const domain::Id& case_id) const;
+    std::vector<domain::Id> note_entity_links(const domain::Id& note_id) const;
+    std::vector<domain::Id> note_evidence_links(const domain::Id& note_id) const;
     std::vector<domain::SearchResult> search(const domain::Id& case_id,
                                              const std::string& query) const;
     std::vector<domain::LogEvent> activity(const domain::Id& case_id) const;

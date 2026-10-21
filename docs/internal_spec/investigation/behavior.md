@@ -18,7 +18,7 @@ Own global templates, perform automated external collection, or infer truth.
 
 ## Main features and rules
 
-Entity normalization supports search without automatic merging. Relations preserve subject/object direction. Evidence roles are supports/contradicts/context. Notes may link entities and evidence. Search matches stored text fields and run-step snapshots, not attachment contents.
+Entity normalization supports search without automatic merging. Relations preserve subject/object direction. Evidence roles are supports/contradicts/context. Notes may link entities and evidence. Entity and evidence image references point to managed attachment-store paths; they remain separate from claim verification and can accompany cases through import/export. Search matches stored text fields and run-step snapshots, not attachment contents.
 
 ## Dependencies and interfaces
 

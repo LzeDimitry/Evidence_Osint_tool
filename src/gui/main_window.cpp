@@ -1,6 +1,7 @@
 #include "gui/main_window.hpp"
 
 #include "gui/context_pages.hpp"
+#include "gui/entity_profile_page.hpp"
 #include "gui/global_pages.hpp"
 #include "gui/gui_helpers.hpp"
 #include "gui/investigation_pages.hpp"
@@ -9,11 +10,13 @@
 #include <QDialogButtonBox>
 #include <QDateTime>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QIcon>
+#include <QKeySequence>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPaintEvent>
@@ -21,6 +24,9 @@
 #include <QPushButton>
 #include <QRadialGradient>
 #include <QResizeEvent>
+#include <QSettings>
+#include <QScreen>
+#include <QShortcut>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -96,10 +102,10 @@ QIcon painted_icon(NavIcon kind, const QColor& color = QColor("#bdc8df")) {
         painter.drawRoundedRect(QRectF(4, 4, 16, 16), 2, 2); painter.drawLine(QPointF(8, 9), QPointF(16, 9)); painter.drawLine(QPointF(8, 13), QPointF(16, 13)); painter.drawLine(QPointF(8, 17), QPointF(13, 17));
         break;
     case NavIcon::Runs:
-        painter.drawRoundedRect(QRectF(4, 4, 16, 16), 2, 2); painter.drawLine(QPointF(8, 8), QPointF(16, 8)); painter.drawLine(QPointF(8, 12), QPointF(16, 12)); painter.drawLine(QPointF(8, 16), QPointF(13, 16));
+        painter.drawRoundedRect(QRectF(4, 4, 16, 16), 2, 2); painter.drawLine(QPointF(7, 8), QPointF(9, 10)); painter.drawLine(QPointF(9, 10), QPointF(12, 6.5)); painter.drawLine(QPointF(14, 8), QPointF(18, 8)); painter.drawLine(QPointF(7, 15), QPointF(9, 17)); painter.drawLine(QPointF(9, 17), QPointF(12, 13.5)); painter.drawLine(QPointF(14, 15), QPointF(18, 15));
         break;
     case NavIcon::Export:
-        painter.drawRect(QRectF(5, 5, 14, 15)); painter.drawLine(QPointF(12, 3), QPointF(12, 13)); painter.drawLine(QPointF(8.5, 9), QPointF(12, 13)); painter.drawLine(QPointF(15.5, 9), QPointF(12, 13));
+        painter.drawLine(QPointF(5, 8), QPointF(5, 20)); painter.drawLine(QPointF(5, 20), QPointF(19, 20)); painter.drawLine(QPointF(19, 20), QPointF(19, 8)); painter.drawLine(QPointF(12, 16), QPointF(12, 4)); painter.drawLine(QPointF(8.5, 7.5), QPointF(12, 4)); painter.drawLine(QPointF(15.5, 7.5), QPointF(12, 4));
         break;
     case NavIcon::Bell:
         painter.drawArc(QRectF(6, 5, 12, 13), 0, 180 * 16); painter.drawLine(QPointF(6, 12), QPointF(6, 17)); painter.drawLine(QPointF(18, 12), QPointF(18, 17)); painter.drawLine(QPointF(4, 18), QPointF(20, 18)); painter.drawEllipse(QRectF(10.5, 20, 3, 3));
@@ -152,7 +158,7 @@ void configure_shell_for_section(QWidget* shell, QFrame* sidebar, QLineEdit* sea
     }
     if (search) {
         if (cases) {
-            const auto search_width = std::clamp(window_width - (window_width < 1100 ? 390 : 900), 380, 680);
+            const auto search_width = std::clamp(window_width - 420, 250, 680);
             search->setMinimumWidth(search_width);
             search->setMaximumWidth(search_width);
             search->setFixedWidth(search_width);
@@ -237,10 +243,14 @@ protected:
         painter.translate(source_x_, 0);
         painter.scale(0.72, 1.0);
         QRadialGradient beam(QPointF(0, 0), 138);
-        beam.setColorAt(0.0, QColor(146, 92, 255, 62));
-        beam.setColorAt(0.34, QColor(120, 72, 226, 34));
-        beam.setColorAt(0.72, QColor(92, 55, 182, 10));
-        beam.setColorAt(1.0, QColor(80, 48, 160, 0));
+        auto center = appearance_accent_color(); center.setAlpha(92);
+        auto middle = appearance_accent_color().lighter(115); middle.setAlpha(48);
+        auto edge = appearance_accent_color().darker(120); edge.setAlpha(16);
+        auto clear = appearance_accent_color(); clear.setAlpha(0);
+        beam.setColorAt(0.0, center);
+        beam.setColorAt(0.34, middle);
+        beam.setColorAt(0.72, edge);
+        beam.setColorAt(1.0, clear);
         painter.fillRect(QRectF(-220, 0, 440, height()), beam);
         painter.restore();
     }
@@ -319,7 +329,9 @@ CaseWorkspace::CaseWorkspace(ApplicationContext& context, const domain::Id& case
     status_layout->setContentsMargins(6, 0, 5, 0);
     status_layout->setSpacing(5);
     auto* status_icon = new QLabel;
-    status_icon->setPixmap(ui_icon(UiIcon::FolderOpen, QColor("#b899ff")).pixmap(QSize(13, 13)));
+    status_icon->setPixmap(ui_icon(UiIcon::FolderOpen, appearance_accent_color().lighter(170)).pixmap(QSize(13, 13)));
+    status_icon->setProperty("accentIconKind", static_cast<int>(UiIcon::FolderOpen));
+    status_icon->setProperty("accentIconSize", QSize(13, 13));
     status_icon->setFixedSize(13, 13);
     status_layout->addWidget(status_icon);
     case_status_ = new QLabel(QStringLiteral("Open"));
@@ -348,7 +360,7 @@ CaseWorkspace::CaseWorkspace(ApplicationContext& context, const domain::Id& case
     auto* nav_layout = new QHBoxLayout(nav_bar);
     nav_layout->setContentsMargins(20, 0, 0, 0);
     nav_layout->setSpacing(2);
-    const QStringList labels = {"Overview", "Entities", "Claims && Relations", "Sources && Evidence", "Notes && Log", "Playbook Runs", "Export"};
+    const QStringList labels = {"Overview", "Entities", "Graph", "Sources && Evidence", "Notes && Log", "Playbook Runs", "Export"};
     const std::array<NavIcon, 7> icons = {NavIcon::Overview, NavIcon::Entities, NavIcon::Claims, NavIcon::Evidence, NavIcon::Notes, NavIcon::Runs, NavIcon::Export};
     for (int index = 0; index < labels.size(); ++index) {
         auto* tab = new QWidget;
@@ -376,8 +388,16 @@ CaseWorkspace::CaseWorkspace(ApplicationContext& context, const domain::Id& case
     root->addWidget(nav_scroll);
 
     pages_ = new QStackedWidget; root->addWidget(pages_, 1);
-    auto* overview = new CaseOverviewPage(context_, case_id_, pages_); entities_page_ = new EntitiesPage(context_, case_id_, pages_); claims_page_ = new ClaimsPage(context_, case_id_, pages_); evidence_page_ = new EvidencePage(context_, case_id_, pages_); auto* notes = new NotesPage(context_, case_id_, pages_); auto* runs = new RunsPage(context_, case_id_, pages_); auto* export_page = new ExportPage(context_, case_id_, pages_);
-    case_pages_ = {overview, entities_page_, claims_page_, evidence_page_, notes, runs, export_page};
+    auto* overview = new CaseOverviewPage(context_, case_id_, pages_);
+    entities_page_ = new EntitiesPage(context_, case_id_, pages_);
+    claims_page_ = new ClaimsPage(context_, case_id_, pages_);
+    evidence_page_ = new EvidencePage(context_, case_id_, pages_);
+    auto* notes = new NotesPage(context_, case_id_, pages_);
+    auto* runs = new RunsPage(context_, case_id_, pages_);
+    auto* export_page = new ExportPage(context_, case_id_, pages_);
+    entity_profile_page_ = new EntityProfilePage(context_, case_id_, pages_);
+
+    case_pages_ = {overview, entities_page_, claims_page_, evidence_page_, notes, runs, export_page, entity_profile_page_};
     pages_->addWidget(scroll_page(overview));
     pages_->addWidget(scroll_page(entities_page_));
     claims_page_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -386,28 +406,72 @@ CaseWorkspace::CaseWorkspace(ApplicationContext& context, const domain::Id& case
     pages_->addWidget(scroll_page(notes));
     pages_->addWidget(scroll_page(runs));
     pages_->addWidget(scroll_page(export_page));
+    entity_profile_scroll_ = scroll_page(entity_profile_page_);
+    pages_->addWidget(entity_profile_scroll_);
+
     navigation_glow_ = new NavigationGlow(this);
     navigation_glow_enabled_ = navigation_glow_enabled();
     navigation_glow_->setVisible(navigation_glow_enabled_);
-    overview->on_add_entity = [this] { add_entity(); }; overview->on_add_claim = [this] { add_claim(); }; overview->on_add_evidence = [this] { add_evidence(); };
+    overview->on_add_entity = [this] { add_entity(); };
+    overview->on_add_claim = [this] { add_claim(); };
+    overview->on_add_evidence = [this] { add_evidence(); };
     overview->on_show_claim = [this](const domain::Id& claim_id) { show_page(2); claims_page_->show_claim(claim_id); };
+    overview->on_show_entity = [this](const domain::Id& entity_id) { show_entity_profile(entity_id, 0); };
+
     entities_page_->on_show_related_claims = [this](const domain::Id& entity_id) { show_page(2); claims_page_->show_related_to_entity(entity_id); };
-    claims_page_->on_show_entity = [this](const domain::Id& entity_id) { show_page(1); entities_page_->show_entity(entity_id); };
+    entities_page_->on_entities_changed = [this] { refresh(); };
+    entities_page_->on_entity_saved = [this](const domain::Id&) { claims_page_->refresh(); };
+    entities_page_->on_entity_created = [this](const domain::Id& id) { claims_page_->place_pending_entity(id); };
+    entities_page_->on_open_profile = [this](const domain::Id& id) { show_entity_profile(id, 1); };
+
+    for (auto* page : case_pages_) page->on_case_data_changed = [this] { refresh_case_header(); };
+    claims_page_->on_show_entity = [this](const domain::Id& entity_id) { show_entity_profile(entity_id, 2); };
     claims_page_->on_show_claim = [this](const domain::Id& claim_id) { show_page(2); claims_page_->show_claim(claim_id); };
-    claims_page_->on_add_entity = [this] { add_entity(); };
-    connect(back, &QPushButton::clicked, this, [this] { if (on_back) on_back(); }); QTimer::singleShot(0, this, [this] { update_case_subtitle(); }); show_page(0); refresh();
+    claims_page_->on_add_entity = [this] { entities_page_->add_entity(); };
+
+    entity_profile_page_->on_back_to_graph = [this] { show_page(2, false); };
+    entity_profile_page_->on_back_to_entities = [this] { show_page(1, false); };
+    entity_profile_page_->on_back_to_overview = [this] { show_page(0, false); };
+    entity_profile_page_->on_view_in_graph = [this](const domain::Id& id) {
+        claims_page_->focus_entity(id);
+        show_page(2, false);
+    };
+    entity_profile_page_->on_view_claim_in_graph = [this](const domain::Id& claim_id) {
+        show_page(2, false);
+        claims_page_->show_claim(claim_id);
+    };
+    entity_profile_page_->on_open_entity_profile = [this](const domain::Id& id) {
+        show_entity_profile(id, 2);
+    };
+    entity_profile_page_->on_entity_modified = [this] {
+        refresh_case_header();
+        claims_page_->refresh();
+        entities_page_->refresh();
+    };
+    connect(back, &QPushButton::clicked, this, [this] { if (on_back) on_back(); }); QTimer::singleShot(0, this, [this] { update_case_subtitle(); }); refresh(); show_page(2, false);
 }
 
-void CaseWorkspace::show_page(int index) {
+void CaseWorkspace::show_page(int index, bool refresh_content) {
     if (index < 0 || index >= static_cast<int>(case_pages_.size())) return;
     pages_->setCurrentIndex(index);
+    if (index >= 0 && index < 7) {
+        case_breadcrumb_->setText(QStringLiteral("Investigation"));
+    }
+    if (refresh_content) {
+        if (index == 0) {
+            refresh_overview();
+        } else {
+            case_pages_[static_cast<std::size_t>(index)]->refresh();
+            refresh_case_header();
+        }
+    }
     for (int position = 0; position < static_cast<int>(navigation_.size()); ++position) {
         auto* nav = navigation_[static_cast<std::size_t>(position)];
         const bool active = position == index;
         nav->setProperty("navActive", active);
         if (nav->property("caseTab").toBool() && nav->property("navIcon").isValid()) {
             const bool show_icon = width() >= 1100 || width() < 560;
-            nav->setIcon(show_icon ? painted_icon(static_cast<NavIcon>(nav->property("navIcon").toInt()), active ? QColor("#cdbaff") : QColor("#bdc8df")) : QIcon());
+            nav->setIcon(show_icon ? painted_icon(static_cast<NavIcon>(nav->property("navIcon").toInt()), active ? appearance_accent_color().lighter(170) : QColor("#bdc8df")) : QIcon());
         }
         nav->style()->unpolish(nav);
         nav->style()->polish(nav);
@@ -416,11 +480,33 @@ void CaseWorkspace::show_page(int index) {
     update_navigation_glow();
 }
 
+void CaseWorkspace::show_entity_profile(const domain::Id& entity_id, int source_page) {
+    if (entity_id.empty() || entity_profile_page_ == nullptr) return;
+    entity_profile_page_->set_entity(entity_id, source_page);
+    pages_->setCurrentWidget(entity_profile_scroll_);
+    case_breadcrumb_->setText(QStringLiteral("Investigation  /  %1").arg(entity_profile_page_->current_entity_label()));
+    for (auto* nav : navigation_) {
+        nav->setProperty("navActive", false);
+        if (nav->property("caseTab").toBool() && nav->property("navIcon").isValid()) {
+            nav->setIcon(painted_icon(static_cast<NavIcon>(nav->property("navIcon").toInt()), QColor("#bdc8df")));
+        }
+        nav->style()->unpolish(nav);
+        nav->style()->polish(nav);
+        nav->update();
+    }
+    if (navigation_glow_ != nullptr) navigation_glow_->setVisible(false);
+}
+
 void CaseWorkspace::set_navigation_glow_enabled(bool enabled) {
     navigation_glow_enabled_ = enabled;
     if (navigation_glow_ == nullptr) return;
     navigation_glow_->setVisible(enabled);
     if (enabled) update_navigation_glow();
+}
+
+void CaseWorkspace::refresh_appearance() {
+    if (claims_page_ != nullptr) claims_page_->refresh_appearance();
+    if (pages_ != nullptr) show_page(pages_->currentIndex());
 }
 
 void CaseWorkspace::update_navigation_glow() {
@@ -461,8 +547,8 @@ void CaseWorkspace::resizeEvent(QResizeEvent* event) {
         case_title_->setToolTip(case_title_->text());
     }
     const bool icons_only = width() < 560;
-    const QStringList compact_tabs = {QStringLiteral("Overview"), QStringLiteral("Entities"), QStringLiteral("Claims"), QStringLiteral("Evidence"), QStringLiteral("Notes"), QStringLiteral("Runs"), QStringLiteral("Export")};
-    const QStringList full_tabs = {QStringLiteral("Overview"), QStringLiteral("Entities"), QStringLiteral("Claims & Relations"), QStringLiteral("Sources & Evidence"), QStringLiteral("Notes & Log"), QStringLiteral("Playbook Runs"), QStringLiteral("Export")};
+    const QStringList compact_tabs = {QStringLiteral("Overview"), QStringLiteral("Entities"), QStringLiteral("Graph"), QStringLiteral("Evidence"), QStringLiteral("Notes"), QStringLiteral("Runs"), QStringLiteral("Export")};
+    const QStringList full_tabs = {QStringLiteral("Overview"), QStringLiteral("Entities"), QStringLiteral("Investigation Graph"), QStringLiteral("Sources & Evidence"), QStringLiteral("Notes & Log"), QStringLiteral("Playbook Runs"), QStringLiteral("Export")};
     for (int index = 0; index < static_cast<int>(navigation_.size()); ++index) {
         auto* tab = navigation_[static_cast<std::size_t>(index)];
         const QString full_tab = full_tabs[index];
@@ -473,7 +559,7 @@ void CaseWorkspace::resizeEvent(QResizeEvent* event) {
         tab->setAccessibleName(full_tab);
         tab->setIconSize(icons_only ? QSize(17, 17) : compact ? QSize(14, 14) : QSize(16, 16));
         const bool active = tab->property("navActive").toBool();
-        const auto icon_color = active ? QColor("#cdbaff") : QColor("#bdc8df");
+        const auto icon_color = active ? appearance_accent_color().lighter(170) : QColor("#bdc8df");
         tab->setIcon((!compact || icons_only) ? painted_icon(static_cast<NavIcon>(tab->property("navIcon").toInt()), icon_color) : QIcon());
         if (icons_only) {
             tab->setFixedWidth(42);
@@ -492,6 +578,29 @@ void CaseWorkspace::resizeEvent(QResizeEvent* event) {
 void CaseWorkspace::add_entity() { show_page(1); entities_page_->add_entity(); }
 void CaseWorkspace::add_claim() { show_page(2); claims_page_->add_claim(); }
 void CaseWorkspace::add_evidence() { show_page(3); evidence_page_->add_evidence(); }
+
+void CaseWorkspace::refresh_overview() {
+    try {
+        if (!case_pages_.empty()) case_pages_.front()->refresh();
+        refresh_case_header();
+    } catch (const std::exception& error) { show_error(this, error); }
+}
+
+void CaseWorkspace::refresh_case_header() {
+    try {
+        const auto current_case = context_.cases.get(case_id_);
+        case_updated_->setText(QStringLiteral("Updated %1").arg(compact_relative_time(current_case.updated_at)));
+        case_updated_->setToolTip(QStringLiteral("Last updated: %1").arg(q(current_case.updated_at)));
+        const auto cases = context_.cases.list();
+        const auto evidence_count = context_.investigation.list_evidence(case_id_).size();
+        for (const auto& item : cases) {
+            if (item.id != case_id_) continue;
+            case_entities_->setText(QStringLiteral("%1 Entities").arg(item.entity_count));
+            break;
+        }
+        case_evidence_->setText(QStringLiteral("%1 Evidence").arg(evidence_count));
+    } catch (const std::exception& error) { show_error(this, error); }
+}
 
 void CaseWorkspace::refresh() { try {
     const auto value = context_.cases.get(case_id_);
@@ -513,10 +622,7 @@ void CaseWorkspace::refresh() { try {
     for (auto* page : case_pages_) page->refresh();
 } catch (const std::exception& error) { show_error(this, error); } }
 
-void CaseWorkspace::search(const QString& query) {
-    const auto text = query.trimmed(); if (text.isEmpty()) return; try { const auto results = context_.investigation.search(case_id_, s(text)); QDialog dialog(this); dialog.setWindowTitle(QStringLiteral("Search in %1").arg(case_title_->text())); dialog.resize(820, 520); auto* layout = new QVBoxLayout(&dialog); layout->setContentsMargins(24, 22, 24, 22); layout->addWidget(heading(QStringLiteral("Search results"), 21)); layout->addWidget(muted(QStringLiteral("Results are limited to the current case and include entities, sources, evidence, claims, notes, and run steps."))); auto* table = table_with_empty_state(); configure_table(table, {"Type", "Title", "Details"}); table->set_empty_state(QStringLiteral("No matching records"), QStringLiteral("Try another phrase or search a broader record type.")); for (const auto& result : results) { const auto row = table->rowCount(); table->insertRow(row); table->setItem(row, 0, result_cell(enum_label(result.object_type))); table->setItem(row, 1, result_cell(q(result.title))); table->setItem(row, 2, result_cell(q(result.snippet))); } layout->addWidget(table, 1); auto* close = new QDialogButtonBox(QDialogButtonBox::Close); connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject); layout->addWidget(close); dialog.exec(); } catch (const std::exception& error) { show_error(this, error); } }
-
-MainWindow::MainWindow(std::filesystem::path data_directory, QWidget* parent) : QMainWindow(parent), context_(std::make_unique<ApplicationContext>(std::move(data_directory))) { setWindowTitle(QStringLiteral("Evidence Trace")); setMinimumSize(900, 600); resize(1440, 900); build_shell(); rebuild_pages(); }
+MainWindow::MainWindow(std::filesystem::path data_directory, QWidget* parent) : QMainWindow(parent), context_(std::make_unique<ApplicationContext>(std::move(data_directory))) { setWindowTitle(QStringLiteral("Evidence Trace")); setMinimumSize(720, 480); resize(1440, 900); build_shell(); rebuild_pages(); }
 
 void MainWindow::build_shell() {
     shell_ = new QWidget;
@@ -588,6 +694,8 @@ void MainWindow::build_shell() {
     body_layout->addWidget(right, 1);
     root->addWidget(body, 1);
     connect(cases_nav_, &QPushButton::clicked, this, &MainWindow::show_cases); connect(playbooks_nav_, &QPushButton::clicked, this, &MainWindow::show_playbooks); connect(settings_nav_, &QPushButton::clicked, this, &MainWindow::show_settings); connect(global_search_, &QLineEdit::returnPressed, this, [this] { run_global_search(global_search_->text()); });
+    auto* search_shortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_K), this);
+    connect(search_shortcut, &QShortcut::activated, this, [this] { global_search_->setFocus(Qt::ShortcutFocusReason); global_search_->selectAll(); });
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event) {
@@ -626,20 +734,38 @@ void CaseWorkspace::show_section(const QString& section) {
     else if (value == "notes" || value == "log") show_page(4);
     else if (value == "runs" || value == "playbooks") show_page(5);
     else if (value == "export") show_page(6);
+    else if (value == "profile" || value == "entity-profile" || value == "entity_profile") {
+        if (entity_profile_page_ && !entity_profile_page_->current_entity_id().empty()) {
+            show_entity_profile(entity_profile_page_->current_entity_id(), 1);
+        } else {
+            const auto entities = context_.investigation.list_entities(case_id_);
+            if (!entities.empty()) {
+                show_entity_profile(entities.front().id, 1);
+            } else {
+                show_page(1);
+            }
+        }
+    }
 }
 
 void CaseWorkspace::show_record(const QString& section, const QString& object_type, const domain::Id& object_id) {
-    show_section(section);
-    if (object_id.empty()) return;
+    if (object_id.empty()) {
+        show_section(section);
+        return;
+    }
     const auto type = object_type.toLower().replace(QLatin1Char(' '), QLatin1Char('_'));
-    if (type == QStringLiteral("entity")) entities_page_->show_entity(object_id);
-    else if (type == QStringLiteral("claim")) claims_page_->show_claim(object_id);
-    else if (type == QStringLiteral("evidence")) evidence_page_->show_evidence(object_id);
-    else if (type == QStringLiteral("source")) evidence_page_->show_source(object_id);
-    else if (type == QStringLiteral("note")) {
-        if (auto* notes = dynamic_cast<NotesPage*>(case_pages_[4])) notes->show_note(object_id);
-    } else if (type == QStringLiteral("run_step")) {
-        if (auto* runs = dynamic_cast<RunsPage*>(case_pages_[5])) runs->show_step(object_id);
+    if (type == QStringLiteral("entity")) {
+        show_entity_profile(object_id, 1);
+    } else {
+        show_section(section);
+        if (type == QStringLiteral("claim")) claims_page_->show_claim(object_id);
+        else if (type == QStringLiteral("evidence")) evidence_page_->show_evidence(object_id);
+        else if (type == QStringLiteral("source")) evidence_page_->show_source(object_id);
+        else if (type == QStringLiteral("note")) {
+            if (auto* notes = dynamic_cast<NotesPage*>(case_pages_[4])) notes->show_note(object_id);
+        } else if (type == QStringLiteral("run_step")) {
+            if (auto* runs = dynamic_cast<RunsPage*>(case_pages_[5])) runs->show_step(object_id);
+        }
     }
 }
 
@@ -648,9 +774,19 @@ void MainWindow::rebuild_pages() {
     workspace_ = nullptr; cases_page_ = nullptr; playbooks_page_ = nullptr; settings_page_ = nullptr;
     cases_page_ = new CasesPage(*context_, this); playbooks_page_ = new PlaybooksPage(*context_, this); settings_page_ = new SettingsPage(*context_, this); content_->addWidget(scroll_page(cases_page_)); content_->addWidget(scroll_page(playbooks_page_)); content_->addWidget(scroll_page(settings_page_));
     cases_page_->on_open_case = [this](const domain::Id& id) { open_case(id); };
-    settings_page_->on_data_directory_requested = [this](const std::filesystem::path& path) { reload_data_directory(path); };
+    settings_page_->on_data_directory_requested = [this](const std::filesystem::path& path) { return reload_data_directory(path); };
     settings_page_->on_navigation_glow_changed = [this](bool enabled) {
         if (workspace_ != nullptr) workspace_->set_navigation_glow_enabled(enabled);
+    };
+    settings_page_->on_appearance_changed = [this] {
+        for (auto* nav : {cases_nav_, playbooks_nav_, settings_nav_}) {
+            if (nav == nullptr || !nav->property("navIcon").isValid()) continue;
+            const bool active = nav->property("navActive").toBool();
+            nav->setIcon(painted_icon(static_cast<NavIcon>(nav->property("navIcon").toInt()),
+                active ? appearance_accent_color().lighter(170) : QColor("#bdc8df")));
+        }
+        if (workspace_ != nullptr) workspace_->refresh_appearance();
+        if (workspace_ != nullptr) workspace_->set_navigation_glow_enabled(navigation_glow_enabled());
     };
     show_cases();
 }
@@ -675,19 +811,29 @@ void MainWindow::show_settings() {
 void MainWindow::open_case(const domain::Id& case_id) { if (workspace_) { content_->removeWidget(workspace_); delete workspace_; workspace_ = nullptr; } try { workspace_ = new CaseWorkspace(*context_, case_id, this); workspace_->on_back = [this] { show_cases(); }; content_->addWidget(workspace_); content_->setCurrentWidget(workspace_); set_navigation(cases_nav_); statusBar()->clearMessage(); statusBar()->setVisible(false); } catch (const std::exception& error) { show_error(this, error); } }
 
 void MainWindow::show_case_section(const QString& section) { if (workspace_) workspace_->show_section(section); }
+void MainWindow::show_case_record(const QString& section, const QString& object_type, const domain::Id& object_id) { if (workspace_) workspace_->show_record(section, object_type, object_id); }
 
-void MainWindow::reload_data_directory(const std::filesystem::path& directory) {
+bool MainWindow::reload_data_directory(const std::filesystem::path& directory) {
     try {
-        if (std::filesystem::absolute(directory) == context_->data_directory) return;
+        const auto absolute_directory = std::filesystem::absolute(directory);
+        if (absolute_directory == context_->data_directory) {
+            QSettings().setValue(QStringLiteral("storage/dataDirectory"), QString::fromStdString(absolute_directory.string()));
+            QSettings().sync();
+            return true;
+        }
 
         // Build the replacement first so a failure leaves the current pages and
         // their ApplicationContext references valid.
         auto replacement = std::make_unique<ApplicationContext>(directory);
         context_.swap(replacement);
+        QSettings().setValue(QStringLiteral("storage/dataDirectory"), QString::fromStdString(context_->data_directory.string()));
+        QSettings().sync();
         rebuild_pages();
         statusBar()->showMessage(QStringLiteral("Data directory reloaded"), 2500);
+        return true;
     } catch (const std::exception& error) {
         show_error(this, error);
+        return false;
     }
 }
 
@@ -697,7 +843,13 @@ void MainWindow::run_global_search(const QString& query) {
     try {
         QDialog dialog(this);
         dialog.setWindowTitle(QStringLiteral("Global search: %1").arg(text));
-        dialog.resize(980, 560);
+        const auto* screen = dialog.screen() != nullptr ? dialog.screen() : QGuiApplication::primaryScreen();
+        const auto available = screen != nullptr ? screen->availableGeometry().size() : QSize(1200, 900);
+        dialog.setMinimumSize(std::min(420, std::max(280, available.width() - 32)),
+                              std::min(240, std::max(160, available.height() - 32)));
+        dialog.setMaximumSize(std::max(280, available.width() - 24),
+                              std::max(180, available.height() - 32));
+        dialog.resize(std::min(980, available.width() - 32), std::min(560, available.height() - 32));
         auto* layout = new QVBoxLayout(&dialog);
         layout->addWidget(heading(QStringLiteral("Search across cases, entities, and evidence"), 17));
         layout->addWidget(muted(QStringLiteral("Double-click a result or use Open selected to navigate to its case record. Case filters remain available on the Cases screen.")));

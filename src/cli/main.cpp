@@ -117,50 +117,65 @@ Usage: evidence-trace [--data-dir DIR] COMMAND SUBCOMMAND [options]
 
 Foundation:
   init
-  case create --title TITLE [--purpose TEXT --scope TEXT --tags a,b]
+  case create --title TITLE [--purpose TEXT --description TEXT --target-type TYPE
+              --scope TEXT --tags a,b]
   case list [--search TEXT]
   case show CASE_ID
-  case edit CASE_ID --title TITLE [--purpose TEXT --scope TEXT --tags a,b]
+  case edit CASE_ID [--title TITLE --purpose TEXT --description TEXT --target-type TYPE
+                     --scope TEXT --tags a,b]
   case archive CASE_ID
   case restore CASE_ID
 
 Investigation data:
-  entity add CASE_ID --type TYPE --label LABEL [--value VALUE]
+  entity add CASE_ID --type TYPE --label LABEL [--value VALUE --details JSON
+             --tags a,b --aliases a,b]
   entity list CASE_ID
   entity show ENTITY_ID
-  source add CASE_ID --type web|document|registry|person|other --locator URL
+  source add CASE_ID --type web|document|registry|person|other
+              [--locator URL --title TITLE --accessed-at UTC --author NAME --reliability TEXT]
   source list CASE_ID
-  evidence file CASE_ID FILE [--source ID] [--source-url URL]
-  evidence text CASE_ID --text TEXT [--source ID] [--location TEXT]
-  evidence url CASE_ID URL [--source ID]
+  evidence file CASE_ID FILE [--source ID --source-url URL --note TEXT --mime TYPE
+              --captured-at UTC]
+  evidence text CASE_ID --text TEXT [--source ID --source-url URL --location TEXT
+              --note TEXT --captured-at UTC]
+  evidence url CASE_ID URL [--source ID --note TEXT --captured-at UTC]
   evidence list CASE_ID
   evidence verify EVIDENCE_ID
-  evidence delete EVIDENCE_ID --confirm
-  claim add CASE_ID --statement TEXT --entities id:role,... [--kind observation|inference]
+  evidence delete EVIDENCE_ID [--confirm] (required when linked)
+  claim add CASE_ID --statement TEXT --entities id:role,...
+             [--predicate TEXT --kind observation|inference --status STATUS
+              --reasoning TEXT --recorded-by ID --evidence id:role[:note],...]
   relation add CASE_ID --subject ID --predicate PREDICATE --object ID --reasoning TEXT
+                 [--statement TEXT --status STATUS --recorded-by ID]
   claim list CASE_ID
   claim show CLAIM_ID
-  claim link CLAIM_ID EVIDENCE_ID --role supports|contradicts|context
+  claim link CLAIM_ID EVIDENCE_ID --role supports|contradicts|context [--note TEXT]
   claim unlink CLAIM_ID EVIDENCE_ID
-  claim status CLAIM_ID STATUS --explanation TEXT
+  claim status CLAIM_ID STATUS --explanation TEXT [--reasoning TEXT]
 
 Context and methodology:
   note add CASE_ID --body TEXT [--title TITLE --entities ID,ID --evidence ID,ID]
   search CASE_ID TEXT
-  technique create --name NAME --steps TEXT
+  technique create --name NAME [--objective TEXT --steps TEXT --example-queries JSON
+                   --tools JSON --limitations TEXT --tags-json JSON]
   technique list
-  playbook create --name NAME
-  playbook add-step --playbook ID [--technique ID] [--name NAME --instructions TEXT]
+  technique update --id ID --name NAME --steps TEXT [--objective TEXT --example-queries JSON
+                   --tools JSON --limitations TEXT --tags-json JSON]
+  playbook create --name NAME [--scope TEXT --description TEXT]
+  playbook list
+  playbook add-step --playbook ID [--technique ID | --name NAME] [--instructions TEXT]
   playbook move-step --step STEP_ID --position NUMBER
   playbook runs --case CASE_ID
   playbook start --case CASE_ID --playbook ID [--entity ID]
   playbook run-steps --run RUN_ID
   playbook step --step STEP_ID --state todo|done|skipped [--note TEXT]
+  playbook add-run-step --run RUN_ID --name NAME [--instructions TEXT]
+  playbook link-step-evidence --step STEP_ID --evidence EVIDENCE_ID
 
 Portability:
-  export archive CASE_ID --output FILE.zip
-  export report CASE_ID --output FILE.md
-  import FILE.zip --mode skip|copy
+  export archive --case CASE_ID --output FILE.zip
+  export report --case CASE_ID --output FILE.md
+  import FILE.zip [--mode skip|copy]
   log CASE_ID
 )";
 }
@@ -296,7 +311,8 @@ void run(Application& application, const std::vector<std::string>& arguments) {
     }
     if (command == "claim" || command == "relation") {
         if (command == "relation" && subcommand == "add") {
-            const auto value = application.investigation.create_relation(required(options, "case"), required(options, "subject"), required(options, "predicate"), required(options, "object"), optional(options, "statement"), domain::claim_status_from_string(optional(options, "status", "unverified")), required(options, "reasoning"), optional(options, "recorded-by"));
+            if (options.positional.empty()) throw std::invalid_argument("relation add requires CASE_ID");
+            const auto value = application.investigation.create_relation(options.positional[0], required(options, "subject"), required(options, "predicate"), required(options, "object"), optional(options, "statement"), domain::claim_status_from_string(optional(options, "status", "unverified")), required(options, "reasoning"), optional(options, "recorded-by"));
             std::cout << "CLAIM_ID=" << value.id << "\n";
             return;
         }
@@ -399,7 +415,9 @@ void run(Application& application, const std::vector<std::string>& arguments) {
         return;
     }
     if (command == "import") {
-        const auto mode = optional(options, "mode", "skip") == "copy" ? import_export::ImportMode::ImportAsCopy : import_export::ImportMode::SkipExisting;
+        const auto mode_value = optional(options, "mode", "skip");
+        if (mode_value != "skip" && mode_value != "copy") throw std::invalid_argument("--mode must be skip or copy");
+        const auto mode = mode_value == "copy" ? import_export::ImportMode::ImportAsCopy : import_export::ImportMode::SkipExisting;
         const auto archive = arguments.size() > 1 && arguments[1].rfind("--", 0) != 0 ? arguments[1] : required(options, "archive");
         const auto result = application.portability.import_case(archive, mode);
         std::cout << result.message << "\n";
@@ -424,6 +442,10 @@ int main(int argc, char** argv) {
         if (arguments.size() >= 2 && arguments[0] == "--data-dir") {
             data_directory = arguments[1];
             arguments.erase(arguments.begin(), arguments.begin() + 2);
+        }
+        if (arguments.empty() || arguments[0] == "help" || arguments[0] == "--help" || arguments[0] == "-h") {
+            print_help();
+            return 0;
         }
         std::filesystem::create_directories(data_directory);
         Application application(data_directory);

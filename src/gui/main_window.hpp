@@ -32,23 +32,27 @@ class EvidencePage;
 class NotesPage;
 class RunsPage;
 class ExportPage;
+class EntityProfilePage;
 
 class CaseWorkspace : public QWidget {
 public:
     CaseWorkspace(ApplicationContext& context, const domain::Id& case_id, QWidget* parent = nullptr);
 
     void refresh();
-    void search(const QString& query);
     void show_section(const QString& section);
+    void show_entity_profile(const domain::Id& entity_id, int source_page = 2);
     void show_record(const QString& section, const QString& object_type, const domain::Id& object_id);
     void set_navigation_glow_enabled(bool enabled);
+    void refresh_appearance();
     std::function<void()> on_back;
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
-    void show_page(int index);
+    void show_page(int index, bool refresh_content = true);
+    void refresh_overview();
+    void refresh_case_header();
     void update_case_subtitle();
     void update_navigation_glow();
     void add_entity();
@@ -79,6 +83,8 @@ private:
     EntitiesPage* entities_page_{nullptr};
     ClaimsPage* claims_page_{nullptr};
     EvidencePage* evidence_page_{nullptr};
+    EntityProfilePage* entity_profile_page_{nullptr};
+    QWidget* entity_profile_scroll_{nullptr};
 };
 
 class MainWindow : public QMainWindow {
@@ -90,7 +96,8 @@ public:
     void show_settings();
     void open_case(const domain::Id& case_id);
     void show_case_section(const QString& section);
-    void reload_data_directory(const std::filesystem::path& directory);
+    void show_case_record(const QString& section, const QString& object_type, const domain::Id& object_id);
+    bool reload_data_directory(const std::filesystem::path& directory);
 
 private:
     void resizeEvent(QResizeEvent* event) override;

@@ -7,6 +7,7 @@
 #include <zip.h>
 
 #include <fstream>
+#include <filesystem>
 #include <map>
 #include <set>
 #include <sstream>
@@ -187,13 +188,13 @@ Json make_case_json(database::Database& database, const domain::Id& case_id) {
     case_object["created_at"] = case_statement.column_text(8); case_object["updated_at"] = case_statement.column_text(9);
 
     Json::Array entities;
-    auto entities_statement = database.prepare("SELECT id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, created_at, updated_at FROM entities WHERE case_id = ? ORDER BY id;");
+    auto entities_statement = database.prepare("SELECT id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, image_paths_json, created_at, updated_at FROM entities WHERE case_id = ? ORDER BY id;");
     entities_statement.bind(1, case_id);
     while (entities_statement.step()) {
         Json::Object object;
         object["id"] = entities_statement.column_text(0); object["case_id"] = entities_statement.column_text(1); object["type"] = entities_statement.column_text(2); object["label"] = entities_statement.column_text(3);
         object["original_value"] = entities_statement.column_text(4); object["canonical_value"] = entities_statement.column_text(5); object["details_json"] = entities_statement.column_text(6); object["tags_json"] = entities_statement.column_text(7); object["aliases_json"] = entities_statement.column_text(8);
-        object["created_at"] = entities_statement.column_text(9); object["updated_at"] = entities_statement.column_text(10); entities.emplace_back(std::move(object));
+        object["image_paths_json"] = entities_statement.column_text(9); object["created_at"] = entities_statement.column_text(10); object["updated_at"] = entities_statement.column_text(11); entities.emplace_back(std::move(object));
     }
     Json::Array sources;
     auto sources_statement = database.prepare("SELECT id, case_id, type, locator, title, accessed_at, author, reliability_note, created_at FROM sources WHERE case_id = ? ORDER BY id;");
@@ -204,7 +205,7 @@ Json make_case_json(database::Database& database, const domain::Id& case_id) {
         object["accessed_at"] = sources_statement.column_text(5); object["author"] = sources_statement.column_text(6); object["reliability_note"] = sources_statement.column_text(7); object["created_at"] = sources_statement.column_text(8); sources.emplace_back(std::move(object));
     }
     Json::Array evidence;
-    auto evidence_statement = database.prepare("SELECT id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, text_content, source_url, captured_at, imported_at, note, quotation_location, created_at FROM evidence WHERE case_id = ? ORDER BY id;");
+    auto evidence_statement = database.prepare("SELECT id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, text_content, source_url, captured_at, imported_at, note, quotation_location, image_paths_json, created_at FROM evidence WHERE case_id = ? ORDER BY id;");
     evidence_statement.bind(1, case_id);
     while (evidence_statement.step()) {
         Json::Object object;
@@ -212,7 +213,7 @@ Json make_case_json(database::Database& database, const domain::Id& case_id) {
         object["relative_path"] = optional_json(evidence_statement.column_optional_text(4)); object["original_filename"] = optional_json(evidence_statement.column_optional_text(5)); object["mime_type"] = optional_json(evidence_statement.column_optional_text(6));
         if (evidence_statement.column_is_null(7)) object["byte_size"] = Json(nullptr); else object["byte_size"] = evidence_statement.column_int64(7);
         object["sha256"] = optional_json(evidence_statement.column_optional_text(8)); object["text_content"] = evidence_statement.column_text(9); object["source_url"] = optional_json(evidence_statement.column_optional_text(10));
-        object["captured_at"] = evidence_statement.column_text(11); object["imported_at"] = evidence_statement.column_text(12); object["note"] = evidence_statement.column_text(13); object["quotation_location"] = evidence_statement.column_text(14); object["created_at"] = evidence_statement.column_text(15);
+        object["captured_at"] = evidence_statement.column_text(11); object["imported_at"] = evidence_statement.column_text(12); object["note"] = evidence_statement.column_text(13); object["quotation_location"] = evidence_statement.column_text(14); object["image_paths_json"] = evidence_statement.column_text(15); object["created_at"] = evidence_statement.column_text(16);
         evidence.emplace_back(std::move(object));
     }
     Json::Array claims;
@@ -305,6 +306,28 @@ void ImportExportService::export_case(const domain::Id& case_id, const std::file
     Json::Array manifest_entries;
     manifest_entries.emplace_back(Json::Object{{"path", "case.json"}, {"size", static_cast<std::int64_t>(case_text.size())}, {"sha256", sha256_hex(std::vector<unsigned char>(case_text.begin(), case_text.end()))}});
     std::vector<std::pair<std::string, std::filesystem::path>> files;
+    Json::Object image_paths_map;
+    auto linked_images = [&](const std::string& query) {
+        auto statement = database_.prepare(query);
+        statement.bind(1, case_id);
+        while (statement.step()) {
+            const auto record_id = statement.column_text(0);
+            const auto values = Json::parse(statement.column_text(1));
+            Json::Array new_paths;
+            std::size_t image_index = 0;
+            for (const auto& path_value : values.as_array()) {
+                const auto relative = path_value.as_string();
+                const auto absolute = attachment_store_.absolute_path(relative);
+                if (!attachment_store_.exists(relative)) throw std::runtime_error("Cannot export missing attached image for " + record_id);
+                const auto bytes = attachment_store_.read(relative);
+                const auto archive_name = std::string("attachments/image-") + record_id + "-" + std::to_string(image_index++) + ".bin";
+                manifest_entries.emplace_back(Json::Object{{"path", archive_name}, {"size", static_cast<std::int64_t>(bytes.size())}, {"sha256", sha256_hex(bytes)}});
+                files.emplace_back(archive_name, absolute);
+                new_paths.emplace_back(archive_name);
+            }
+            image_paths_map[record_id] = Json(std::move(new_paths));
+        }
+    };
     auto evidence_statement = database_.prepare("SELECT id, relative_path, sha256, byte_size FROM evidence WHERE case_id = ? AND kind = 'file' ORDER BY id;");
     evidence_statement.bind(1, case_id);
     while (evidence_statement.step()) {
@@ -321,6 +344,12 @@ void ImportExportService::export_case(const domain::Id& case_id, const std::file
         manifest_entries.emplace_back(Json::Object{{"path", archive_name}, {"size", static_cast<std::int64_t>(bytes.size())}, {"sha256", sha256_hex(bytes)}});
         files.emplace_back(archive_name, absolute);
     }
+    linked_images("SELECT id, image_paths_json FROM entities WHERE case_id = ? ORDER BY id;");
+    linked_images("SELECT id, image_paths_json FROM evidence WHERE case_id = ? ORDER BY id;");
+    auto case_root = Json::parse(case_text).as_object();
+    case_root["image_paths"] = Json(std::move(image_paths_map));
+    const auto final_case_text = Json(std::move(case_root)).dump();
+    manifest_entries[0] = Json::Object{{"path", "case.json"}, {"size", static_cast<std::int64_t>(final_case_text.size())}, {"sha256", sha256_hex(std::vector<unsigned char>(final_case_text.begin(), final_case_text.end()))}};
     const Json manifest(Json::Object{{"format", "evidence-trace-manifest"}, {"format_version", 1}, {"entries", std::move(manifest_entries)}});
     const auto manifest_text = manifest.dump();
     std::filesystem::create_directories(archive_path.parent_path().empty() ? std::filesystem::path(".") : archive_path.parent_path());
@@ -333,7 +362,7 @@ void ImportExportService::export_case(const domain::Id& case_id, const std::file
     }
     bool discard = true;
     try {
-        zip_add_bytes(archive, "case.json", case_text); zip_add_bytes(archive, "manifest.json", manifest_text);
+        zip_add_bytes(archive, "case.json", final_case_text); zip_add_bytes(archive, "manifest.json", manifest_text);
         for (const auto& [name, path] : files) zip_add_file(archive, name, path);
         if (zip_close(archive) != 0) throw std::runtime_error("Unable to finalize ZIP archive");
         discard = false;
@@ -449,6 +478,8 @@ void validate_import_records(const Json::Object& case_object,
                              const ArchiveData& archive) {
     const auto case_id = required_string(case_object, "id");
     if (case_id.empty()) throw std::invalid_argument("Import rejected: case ID is empty");
+    std::set<std::string> allowed_images;
+    for (const auto& [path, bytes] : archive.entries) { (void)bytes; if (path.rfind("attachments/image-", 0) == 0) allowed_images.insert(path); }
     std::set<std::string> entity_ids;
     for (const auto& item : entities) {
         const auto& object = as_object(item, "entity");
@@ -485,7 +516,7 @@ void validate_import_records(const Json::Object& case_object,
     }
     for (const auto& [path, bytes] : archive.entries) {
         (void)bytes;
-        if (path.rfind("attachments/", 0) == 0 && !file_paths.contains(path)) throw std::invalid_argument("Import rejected: unreferenced attachment " + path);
+        if (path.rfind("attachments/", 0) == 0 && !file_paths.contains(path) && !allowed_images.contains(path)) throw std::invalid_argument("Import rejected: unreferenced attachment " + path);
     }
     std::set<std::string> claim_ids;
     for (const auto& item : claims) {
@@ -572,8 +603,26 @@ ImportResult ImportExportService::import_case(const std::filesystem::path& archi
     const auto& case_object = as_object(root.at("case"), "case");
     const auto original_case_id = required_string(case_object, "id");
     const auto& entities = required_array(root, "entities");
-    const auto& sources = required_array(root, "sources");
     const auto& evidence = required_array(root, "evidence");
+    std::set<std::string> image_owner_ids;
+    for (const auto& item : entities) image_owner_ids.insert(required_string(as_object(item, "entity"), "id"));
+    for (const auto& item : evidence) image_owner_ids.insert(required_string(as_object(item, "evidence"), "id"));
+    std::map<std::string, std::vector<std::pair<std::string, std::string>>> imported_images;
+    std::map<std::string, std::string> imported_image_path_map;
+    if (const auto image_map = root.find("image_paths"); image_map != root.end()) {
+        for (const auto& [record_id, paths_value] : image_map->second.as_object()) {
+            if (!image_owner_ids.contains(record_id)) throw std::invalid_argument("Import rejected: attached image references an unknown record");
+            const auto& paths = paths_value.as_array();
+            for (std::size_t index = 0; index < paths.size(); ++index) {
+                const auto archive_path = paths[index].as_string();
+                if (!safe_archive_path(archive_path) || archive_path.rfind("attachments/image-", 0) != 0 || !archive.entries.contains(archive_path)) throw std::invalid_argument("Import rejected: invalid attached image path");
+                const auto destination = std::string("attachments/") + domain::new_id() + ".bin";
+                imported_images[record_id].emplace_back(archive_path, destination);
+                imported_image_path_map[archive_path] = destination;
+            }
+        }
+    }
+    const auto& sources = required_array(root, "sources");
     const auto& claims = required_array(root, "claims");
     const auto& claim_entities = required_array(root, "claim_entities");
     const auto& claim_evidence = required_array(root, "claim_evidence");
@@ -607,21 +656,22 @@ ImportResult ImportExportService::import_case(const std::filesystem::path& archi
             const auto new_id = ids.at(required_string(object, "id"));
             staged_files.emplace_back(std::filesystem::path("attachments") / (new_id + ".bin"), attachment_store_.stage_bytes(archive.entries.at(*path)));
         }
+        for (auto& [record_id, images] : imported_images) for (auto& [archive_path, destination] : images) { (void)record_id; staged_files.emplace_back(destination, attachment_store_.stage_bytes(archive.entries.at(archive_path))); }
         database::Transaction transaction(database_);
         auto case_insert = database_.prepare("INSERT INTO cases(id, title, purpose, description, primary_target_type, scope, tags_json, status, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
         case_insert.bind(1, ids.at(original_case_id)); case_insert.bind(2, required_string(case_object, "title") + (remap ? " (imported copy)" : "")); case_insert.bind(3, optional_string(case_object, "purpose")); case_insert.bind(4, optional_string(case_object, "description")); case_insert.bind(5, optional_value(case_object, "primary_target_type")); case_insert.bind(6, optional_string(case_object, "scope")); case_insert.bind(7, optional_string(case_object, "tags_json", "[]")); case_insert.bind(8, optional_string(case_object, "status", "active")); case_insert.bind(9, required_string(case_object, "created_at")); case_insert.bind(10, required_string(case_object, "updated_at")); case_insert.step();
-        for (const auto& item : entities) { const auto& o = as_object(item, "entity"); auto s = database_.prepare("INSERT INTO entities(id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"); s.bind(1, mapped(required_string(o, "id"), ids)); s.bind(2, mapped(required_string(o, "case_id"), ids)); s.bind(3, required_string(o, "type")); s.bind(4, required_string(o, "label")); s.bind(5, optional_string(o, "original_value")); s.bind(6, optional_string(o, "canonical_value")); s.bind(7, optional_string(o, "details_json", "{}")); s.bind(8, optional_string(o, "tags_json", "[]")); s.bind(9, optional_string(o, "aliases_json", "[]")); s.bind(10, required_string(o, "created_at")); s.bind(11, required_string(o, "updated_at")); s.step(); }
+        for (const auto& item : entities) { const auto& o = as_object(item, "entity"); const auto old_id = required_string(o, "id"); auto s = database_.prepare("INSERT INTO entities(id, case_id, type, label, original_value, canonical_value, details_json, tags_json, aliases_json, image_paths_json, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"); s.bind(1, mapped(old_id, ids)); s.bind(2, mapped(required_string(o, "case_id"), ids)); s.bind(3, required_string(o, "type")); s.bind(4, required_string(o, "label")); s.bind(5, optional_string(o, "original_value")); s.bind(6, optional_string(o, "canonical_value")); s.bind(7, optional_string(o, "details_json", "{}")); s.bind(8, optional_string(o, "tags_json", "[]")); s.bind(9, optional_string(o, "aliases_json", "[]")); Json::Array paths; for (const auto& [archive_path, destination] : imported_images[old_id]) { (void)archive_path; paths.emplace_back(destination); } s.bind(10, Json(std::move(paths)).dump()); s.bind(11, required_string(o, "created_at")); s.bind(12, required_string(o, "updated_at")); s.step(); }
         for (const auto& item : sources) { const auto& o = as_object(item, "source"); auto s = database_.prepare("INSERT INTO sources(id, case_id, type, locator, title, accessed_at, author, reliability_note, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);"); s.bind(1, mapped(required_string(o, "id"), ids)); s.bind(2, mapped(required_string(o, "case_id"), ids)); s.bind(3, required_string(o, "type")); s.bind(4, optional_string(o, "locator")); s.bind(5, optional_string(o, "title")); s.bind(6, required_string(o, "accessed_at")); s.bind(7, optional_string(o, "author")); s.bind(8, optional_string(o, "reliability_note")); s.bind(9, required_string(o, "created_at")); s.step(); }
         for (const auto& item : evidence) {
             const auto& o = as_object(item, "evidence"); const auto kind = required_string(o, "kind"); const auto old_id = required_string(o, "id");
-            auto s = database_.prepare("INSERT INTO evidence(id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, text_content, source_url, captured_at, imported_at, note, quotation_location, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+            auto s = database_.prepare("INSERT INTO evidence(id, case_id, source_id, kind, relative_path, original_filename, mime_type, byte_size, sha256, text_content, source_url, captured_at, imported_at, note, quotation_location, image_paths_json, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
             s.bind(1, mapped(old_id, ids)); s.bind(2, mapped(required_string(o, "case_id"), ids));
             if (const auto source = optional_value(o, "source_id"); source) s.bind(3, mapped(*source, ids)); else s.bind_null(3);
             s.bind(4, kind);
             if (kind == "file") s.bind(5, std::string("attachments/") + mapped(old_id, ids) + ".bin"); else s.bind(5, optional_value(o, "relative_path"));
             s.bind(6, optional_value(o, "original_filename")); s.bind(7, optional_value(o, "mime_type"));
             if (const auto iterator = o.find("byte_size"); iterator != o.end() && !iterator->second.is_null()) s.bind(8, iterator->second.as_int64()); else s.bind_null(8);
-            s.bind(9, optional_value(o, "sha256")); s.bind(10, optional_string(o, "text_content")); s.bind(11, optional_value(o, "source_url")); s.bind(12, required_string(o, "captured_at")); s.bind(13, required_string(o, "imported_at")); s.bind(14, optional_string(o, "note")); s.bind(15, optional_string(o, "quotation_location")); s.bind(16, required_string(o, "created_at")); s.step();
+            s.bind(9, optional_value(o, "sha256")); s.bind(10, optional_string(o, "text_content")); s.bind(11, optional_value(o, "source_url")); s.bind(12, required_string(o, "captured_at")); s.bind(13, required_string(o, "imported_at")); s.bind(14, optional_string(o, "note")); s.bind(15, optional_string(o, "quotation_location")); Json::Array paths; for (const auto& [archive_path, destination] : imported_images[old_id]) { (void)archive_path; paths.emplace_back(destination); } s.bind(16, Json(std::move(paths)).dump()); s.bind(17, required_string(o, "created_at")); s.step();
         }
         for (const auto& item : claims) { const auto& o = as_object(item, "claim"); auto s = database_.prepare("INSERT INTO claims(id, case_id, statement, kind, predicate, status, reasoning, recorded_by, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"); s.bind(1, mapped(required_string(o, "id"), ids)); s.bind(2, mapped(required_string(o, "case_id"), ids)); s.bind(3, required_string(o, "statement")); s.bind(4, required_string(o, "kind")); s.bind(5, optional_value(o, "predicate")); s.bind(6, required_string(o, "status")); s.bind(7, optional_string(o, "reasoning")); s.bind(8, optional_string(o, "recorded_by")); s.bind(9, required_string(o, "created_at")); s.bind(10, required_string(o, "updated_at")); s.step(); }
         for (const auto& item : claim_entities) { const auto& o = as_object(item, "claim entity link"); auto s = database_.prepare("INSERT INTO claim_entities(claim_id, entity_id, role) VALUES(?, ?, ?);"); s.bind(1, mapped(required_string(o, "claim_id"), ids)); s.bind(2, mapped(required_string(o, "entity_id"), ids)); s.bind(3, required_string(o, "role")); s.step(); }

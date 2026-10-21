@@ -15,7 +15,7 @@ sudo apt update
 sudo apt install build-essential cmake qt6-base-dev libsqlite3-dev libssl-dev libzip-dev
 ```
 
-After downloading and extracting the source archive, run `./install.sh` from the repository directory. The script configures and builds a Release version, then installs `evidence-trace-gui` and `evidence-trace` under `~/.local/bin`. It does not install system packages or use `sudo`; use the commands above to prepare dependencies. Set `EVIDENCE_TRACE_PREFIX`, `EVIDENCE_TRACE_BUILD_DIR`, or `EVIDENCE_TRACE_JOBS`, or pass `--prefix`, `--build-dir`, and `--jobs` to customize the install location, build directory, or parallelism. Run `./install.sh --help` for details.
+After downloading and extracting the source archive, run `./install.sh` from the repository directory. The script configures and builds a Release version, then installs `evidence-trace-gui` and `evidence-trace` under `~/.local/bin`, plus a desktop menu entry and the Evidence Trace icon. The GUI opens maximized. It does not install system packages or use `sudo`; use the commands above to prepare dependencies. Set `EVIDENCE_TRACE_PREFIX`, `EVIDENCE_TRACE_BUILD_DIR`, or `EVIDENCE_TRACE_JOBS`, or pass `--prefix`, `--build-dir`, and `--jobs` to customize the install location, build directory, or parallelism. Run `./install.sh --help` for details.
 
 Alternatively, configure a development build as below and install it with:
 

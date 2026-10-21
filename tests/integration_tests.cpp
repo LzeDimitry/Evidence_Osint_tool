@@ -145,8 +145,13 @@ void test_mvp() {
             require(context.cases.get(case_id).tags_json.find("osint") != std::string::npos, "case tags are stored");
             context.cases.update(case_id, "Username investigation — revised", created.purpose, created.description, created.primary_target_type, created.scope, std::nullopt);
             require(context.cases.get(case_id).title == "Username investigation — revised", "case metadata update");
-            username_id = context.investigation.create_entity(case_id, domain::EntityType::Username, "john1337", "John1337", "{}", {}, {"john1337-old"}).id;
+            const auto entity_created = context.investigation.create_entity(case_id, domain::EntityType::Username, "john1337", "John1337", "{}", {}, {"john1337-old"});
+            username_id = entity_created.id;
+            require(context.cases.get(case_id).updated_at >= entity_created.updated_at, "case update time tracks logged entity changes");
             person_id = context.investigation.create_entity(case_id, domain::EntityType::Person, "John Doe", "John Doe").id;
+            const auto image_fixture = root / "person-image.png";
+            write_file(image_fixture, "synthetic image bytes");
+            context.investigation.add_entity_image(person_id, image_fixture);
             require(context.investigation.get_entity(username_id).aliases_json.find("john1337-old") != std::string::npos, "entity aliases persist");
         }
         {
@@ -156,6 +161,7 @@ void test_mvp() {
             require(context.cases.get(case_id).purpose == "Establish a possible account relationship", "case persists after restart");
             require(context.investigation.list_entities(case_id).size() == 2, "entities persist after restart");
             require(context.investigation.get_entity(username_id).aliases_json.find("john1337-old") != std::string::npos, "entity aliases persist after restart");
+            require(context.investigation.get_entity(person_id).image_paths_json.find("attachments/") != std::string::npos, "entity image reference persists after restart");
 
             const auto source = context.investigation.create_source(case_id, domain::SourceType::Web, "https://example.test/profile", "Profile");
             source_id = source.id;
@@ -163,6 +169,9 @@ void test_mvp() {
             require(context.investigation.get_evidence(external.id).kind == domain::EvidenceKind::Url, "URL evidence");
             const auto text = context.investigation.add_text_evidence(case_id, "A quoted profile excerpt", source.id, std::string("https://example.test/profile"), "Excerpt note", "Profile section");
             text_evidence_id = text.id;
+            const auto evidence_image_fixture = root / "evidence-image.png";
+            write_file(evidence_image_fixture, "synthetic screenshot bytes");
+            context.investigation.add_evidence_image(text.id, evidence_image_fixture);
             require(context.investigation.get_evidence(text.id).quotation_location == "Profile section", "text quotation location");
 
             const auto original = root / "original.txt";
@@ -206,6 +215,14 @@ void test_mvp() {
             bool saw_status_change = false;
             for (const auto& event : events) if (event.action == "status_changed" && event.occurred_at.size() > 0 && event.payload_json.find("possible") != std::string::npos && event.payload_json.find("refuted") != std::string::npos && event.payload_json.find("A later independent check") != std::string::npos) saw_status_change = true;
             require(saw_status_change, "status history records explanation");
+            context.investigation.change_relation_predicate(relation_id, "associated_with");
+            context.investigation.reverse_relation(relation_id);
+            const auto reversed_links = context.investigation.claim_entities(relation_id);
+            require(context.investigation.get_claim(relation_id).predicate == std::optional<std::string>("associated_with") &&
+                        std::any_of(reversed_links.begin(), reversed_links.end(), [&](const auto& link) { return link.entity_id == person_id && link.role == domain::ClaimEntityRole::Subject; }) &&
+                        std::any_of(reversed_links.begin(), reversed_links.end(), [&](const auto& link) { return link.entity_id == username_id && link.role == domain::ClaimEntityRole::Object; }) &&
+                        context.investigation.claim_evidence(relation_id).size() == 1,
+                    "relationship type and direction can change without losing evidence links");
 
             const auto confirmed_relation = context.investigation.create_relation(
                 case_id,
@@ -224,7 +241,9 @@ void test_mvp() {
                         context.investigation.claim_evidence(confirmed_relation.id).size() == 1,
                     "confirmed relation can be created with selected kind and supporting evidence");
 
-            const auto note = context.investigation.add_note(case_id, "Search phrase: john1337 at https://example.test/profile", "Failed lead");
+            const auto note = context.investigation.add_note(case_id, "Search phrase: john1337 at https://example.test/profile", "Failed lead", {username_id}, {text.id});
+            require(context.investigation.note_entity_links(note.id) == std::vector<domain::Id>{username_id}, "manual note links to its related entity");
+            require(context.investigation.note_evidence_links(note.id) == std::vector<domain::Id>{text.id}, "manual note links to its supporting evidence");
             require(!context.investigation.search(case_id, "john1337").empty(), "search finds username");
             require(!context.investigation.search(case_id, "example.test").empty(), "search finds URL");
             require(!context.investigation.search(case_id, "Failed lead").empty(), "search finds note");
@@ -297,6 +316,7 @@ void test_mvp() {
                             clean.investigation.claim_evidence(confirmed_relation_id)[0].evidence_id == file_evidence_id,
                         "confirmed relation and its supporting evidence survive ZIP roundtrip");
                 require(clean.investigation.get_evidence(text_evidence_id).text_content == "A quoted profile excerpt" && clean.investigation.get_evidence(text_evidence_id).quotation_location == "Profile section", "roundtrip text evidence matches");
+                require(clean.investigation.get_entity(person_id).image_paths_json.find("attachments/") != std::string::npos && clean.investigation.get_evidence(text_evidence_id).image_paths_json.find("attachments/") != std::string::npos, "entity and evidence image references survive ZIP roundtrip");
                 require(clean.investigation.list_notes(case_id).size() == 1, "roundtrip note persists");
                 const auto imported_steps = clean.playbooks.list_run_steps(run_id);
                 require(imported_steps.size() == 1 && clean.playbooks.evidence_for_step(imported_steps[0].id).size() == 1 && clean.playbooks.evidence_for_step(imported_steps[0].id)[0] == file_evidence_id, "playbook step evidence association survives ZIP roundtrip");
@@ -316,6 +336,21 @@ void test_mvp() {
             require(context.cases.get(case_id).id == case_id, "case remains readable after all workflows");
             require(context.playbooks.list_runs(case_id).size() == 1 && context.playbooks.list_run_steps(run_id).size() == 1, "playbook run persists");
             require(context.investigation.claim_evidence(relation_id).size() == 1 && context.investigation.claim_evidence(relation_id)[0].evidence_id == file_evidence_id, "claim evidence association persists after restart");
+            {
+                const auto deleted_relation = context.investigation.get_claim(relation_id);
+                const auto relation_entities = context.investigation.claim_entities(relation_id);
+                const auto relation_evidence = context.investigation.claim_evidence(relation_id);
+                context.investigation.delete_claim(relation_id, true);
+                context.investigation.restore_relation(deleted_relation, relation_entities, relation_evidence);
+                require(context.investigation.get_claim(relation_id).status == deleted_relation.status &&
+                            context.investigation.claim_entities(relation_id).size() == relation_entities.size() &&
+                            context.investigation.claim_evidence(relation_id).size() == relation_evidence.size(),
+                        "graph undo restores removed relationship with the same links and assessment");
+            }
+            const auto persisted_direction = context.investigation.claim_entities(relation_id);
+            require(std::any_of(persisted_direction.begin(), persisted_direction.end(), [&](const auto& link) { return link.entity_id == person_id && link.role == domain::ClaimEntityRole::Subject; }) &&
+                        std::any_of(persisted_direction.begin(), persisted_direction.end(), [&](const auto& link) { return link.entity_id == username_id && link.role == domain::ClaimEntityRole::Object; }),
+                    "reversed relationship direction persists after restart");
             require(context.investigation.get_claim(confirmed_relation_id).status == domain::ClaimStatus::Confirmed &&
                         context.investigation.get_claim(confirmed_relation_id).kind == domain::ClaimKind::Observation &&
                         context.investigation.claim_evidence(confirmed_relation_id).size() == 1,

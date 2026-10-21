@@ -44,8 +44,6 @@ the handoff, state what changed, what checks actually ran, and which gaps remain
 If the repository provides no code or test evidence for a statement, label it
 unverified rather than presenting it as fact.
 
-## Reference material
+## Reference assets
 
-`mb_remeber/` is frozen, non-canonical reference material, including the Ukrainian specification. Do not update it as part of English documentation maintenance.
-
-Legacy examples in `reference/` are non-authoritative examples, not project policies or module contracts. GUI PNGs are visual reference assets, not screenshots proving implemented behavior. Proposals named `temp.*` are review artifacts and are excluded from current guidance. Approval of this migration does not adopt any reference asset as a product requirement.
+GUI PNGs under `design/gui/` are visual reference assets, not screenshots proving implemented behavior. Active specifications and guides are located under `spec/`, `internal_spec/`, `development/`, and `user/`. Master Prompts and full project blueprints are maintained under `../MSP/`.

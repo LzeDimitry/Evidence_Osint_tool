@@ -1,17 +1,25 @@
 #include "gui/gui_helpers.hpp"
+#include "gui/dialogs.hpp"
+#include "services/investigation_service.hpp"
 
 #include "import_export/json.hpp"
 
 #include <QAbstractItemView>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFontMetrics>
+#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QLabel>
 #include <QMessageBox>
 #include <QObject>
 #include <QPainter>
 #include <QPalette>
 #include <QPaintEvent>
+#include <QPushButton>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QTextLayout>
 #include <QTextOption>
@@ -19,9 +27,18 @@
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
 #include <cmath>
 
 namespace evidence_trace::gui {
+
+domain::Id persist_link_evidence(services::InvestigationService& service, const domain::Id& case_id,
+                                 const LinkEvidenceForm& form) {
+    if (form.import_file_path) return service.add_file_evidence(case_id, std::filesystem::path(s(*form.import_file_path)), form.import_source_id).id;
+    if (form.new_url) return service.add_url_evidence(case_id, s(*form.new_url), form.import_source_id, s(form.note)).id;
+    if (form.new_text) return service.add_text_evidence(case_id, s(*form.new_text), form.import_source_id, std::nullopt, s(form.note)).id;
+    return form.evidence_id;
+}
 
 namespace {
 
@@ -147,6 +164,7 @@ QIcon ui_icon(UiIcon kind, const QColor& color) {
         painter.drawRoundedRect(QRectF(5, 3, 12, 18), 1.5, 1.5); line(8, 8, 14, 8); line(8, 12, 15, 12); line(8, 16, 13, 16); line(14, 3, 19, 8); break;
     case UiIcon::Download: line(12, 3, 12, 15); line(7, 11, 12, 16); line(17, 11, 12, 16); line(5, 20, 19, 20); break;
     case UiIcon::Edit: painter.drawLine(QPointF(5, 18), QPointF(6, 14)); painter.drawLine(QPointF(6, 14), QPointF(16, 4)); painter.drawLine(QPointF(16, 4), QPointF(20, 8)); painter.drawLine(QPointF(20, 8), QPointF(10, 18)); line(5, 18, 10, 18); break;
+    case UiIcon::Email: painter.drawRoundedRect(QRectF(3.5, 5, 17, 14), 2, 2); line(4.5, 7, 12, 13); line(19.5, 7, 12, 13); break;
     case UiIcon::Entity:
         painter.drawEllipse(QRectF(8, 3.5, 8, 8)); painter.drawArc(QRectF(4, 12, 16, 9), 0, 180 * 16); break;
     case UiIcon::Evidence:
@@ -174,6 +192,7 @@ QIcon ui_icon(UiIcon kind, const QColor& color) {
     case UiIcon::List:
         for (const auto y : {6.0, 12.0, 18.0}) { painter.drawEllipse(QRectF(3.5, y - 1.2, 2.4, 2.4)); line(9, y, 20, y); } break;
     case UiIcon::More: painter.setBrush(color); painter.setPen(Qt::NoPen); painter.drawEllipse(QRectF(4, 10, 3, 3)); painter.drawEllipse(QRectF(10.5, 10, 3, 3)); painter.drawEllipse(QRectF(17, 10, 3, 3)); break;
+    case UiIcon::MapPin: painter.drawEllipse(QRectF(5, 2.5, 14, 14)); painter.drawEllipse(QRectF(9.5, 7, 5, 5)); line(7.5, 14, 12, 21.5); line(16.5, 14, 12, 21.5); break;
     case UiIcon::Note: painter.drawRoundedRect(QRectF(4, 4, 16, 16), 2, 2); line(8, 9, 16, 9); line(8, 13, 16, 13); line(8, 17, 13, 17); break;
     case UiIcon::Organization:
         painter.drawRoundedRect(QRectF(8, 3, 8, 5), 1, 1); line(12, 8, 12, 11); line(6, 11, 18, 11); line(6, 11, 6, 15); line(18, 11, 18, 15); painter.drawRoundedRect(QRectF(3, 15, 6, 5), 1, 1); painter.drawRoundedRect(QRectF(9, 15, 6, 5), 1, 1); painter.drawRoundedRect(QRectF(15, 15, 6, 5), 1, 1); break;
@@ -182,6 +201,8 @@ QIcon ui_icon(UiIcon kind, const QColor& color) {
         painter.drawEllipse(QRectF(9, 3.5, 6, 6));
         painter.drawRoundedRect(QRectF(5, 11, 14, 9), 4, 4);
         break;
+    case UiIcon::Phone:
+        painter.drawRoundedRect(QRectF(7, 2.5, 10, 19), 2, 2); line(10, 5, 14, 5); painter.drawEllipse(QRectF(11, 18, 2, 2)); break;
     case UiIcon::Play: painter.setBrush(color); painter.setPen(Qt::NoPen); painter.drawPolygon(QPolygonF{QPointF(8, 4), QPointF(19, 12), QPointF(8, 20)}); break;
     case UiIcon::Restore: painter.drawArc(QRectF(4, 5, 15, 15), 45 * 16, 285 * 16); line(4, 5, 4, 11); line(4, 5, 10, 5); break;
     case UiIcon::Search: painter.drawEllipse(QRectF(4, 4, 11, 11)); line(13.5, 13.5, 20, 20); break;
@@ -196,7 +217,7 @@ QIcon ui_icon(UiIcon kind, const QColor& color) {
     case UiIcon::Settings:
         painter.drawEllipse(QRectF(8, 8, 8, 8)); for (int i = 0; i < 8; ++i) { const auto angle = i * 45.0 * 3.1415926535 / 180.0; line(12 + std::cos(angle) * 6.2, 12 + std::sin(angle) * 6.2, 12 + std::cos(angle) * 8.5, 12 + std::sin(angle) * 8.5); } break;
     case UiIcon::Shield: painter.drawPolygon(QPolygonF{QPointF(12, 3), QPointF(19, 6), QPointF(18, 14), QPointF(12, 21), QPointF(6, 14), QPointF(5, 6)}); break;
-    case UiIcon::Source: painter.drawEllipse(QRectF(4, 6, 7, 7)); painter.drawEllipse(QRectF(13, 6, 7, 7)); line(10, 9.5, 14, 9.5); line(6, 13, 6, 18); line(18, 13, 18, 18); line(6, 18, 18, 18); break;
+    case UiIcon::Source: painter.drawRoundedRect(QRectF(3.5, 4, 17, 16), 1.5, 1.5); line(12, 5, 12, 19); line(6, 8, 10, 8); line(14, 8, 18, 8); line(6, 12, 10, 12); line(14, 12, 18, 12); line(6, 16, 10, 16); line(14, 16, 18, 16); break;
     case UiIcon::Target:
         painter.drawEllipse(QRectF(5, 5, 14, 14)); painter.drawEllipse(QRectF(9, 9, 6, 6)); line(12, 2.5, 12, 6); line(12, 18, 12, 21.5); line(2.5, 12, 6, 12); line(18, 12, 21.5, 12); break;
     case UiIcon::Activity:
@@ -206,6 +227,36 @@ QIcon ui_icon(UiIcon kind, const QColor& color) {
     case UiIcon::Warning: painter.drawPolygon(QPolygonF{QPointF(12, 3), QPointF(21, 20), QPointF(3, 20)}); line(12, 8, 12, 14); painter.drawPoint(QPointF(12, 17)); break;
     }
     return QIcon(pixmap);
+}
+
+void set_accent_icon(QTableWidgetItem* item, UiIcon kind) {
+    if (item == nullptr) return;
+    item->setIcon(ui_icon(kind, appearance_accent_color().lighter(170)));
+    item->setData(Qt::UserRole + 173, static_cast<int>(kind));
+}
+
+void set_accent_icon(QComboBox* combo, int index, UiIcon kind) {
+    if (combo == nullptr || index < 0 || index >= combo->count()) return;
+    combo->setItemIcon(index, ui_icon(kind, appearance_accent_color().lighter(170)));
+    combo->setItemData(index, static_cast<int>(kind), Qt::UserRole + 173);
+}
+
+void set_accent_tab_icon(QTabWidget* tabs, int index, UiIcon kind) {
+    if (tabs == nullptr || index < 0 || index >= tabs->count()) return;
+    const auto property_name = QStringLiteral("accentTabIconKind%1").arg(index).toUtf8();
+    tabs->setProperty(property_name.constData(), static_cast<int>(kind));
+    refresh_accent_tab_icons(tabs);
+}
+
+void refresh_accent_tab_icons(QTabWidget* tabs) {
+    if (tabs == nullptr) return;
+    const auto accent = appearance_accent_color().lighter(170);
+    const auto neutral = QColor("#aebbd2");
+    for (int index = 0; index < tabs->count(); ++index) {
+        const auto property_name = QStringLiteral("accentTabIconKind%1").arg(index).toUtf8();
+        const auto kind = tabs->property(property_name.constData());
+        if (kind.isValid()) tabs->setTabIcon(index, ui_icon(static_cast<UiIcon>(kind.toInt()), index == tabs->currentIndex() ? accent : neutral));
+    }
 }
 
 QLabel* make_tag_chip(const QString& value, QWidget* parent, int maximum_width) {
@@ -305,8 +356,8 @@ void apply_theme(QApplication& application) {
     palette.setColor(QPalette::ToolTipBase, QColor("#172235"));
     palette.setColor(QPalette::ToolTipText, QColor("#eef1f8"));
     application.setPalette(palette);
-    application.setFont(QFont("DejaVu Sans", 10));
-    application.setStyleSheet(R"CSS(
+    application.setProperty("baseApplicationFont", QFontDatabase::systemFont(QFontDatabase::GeneralFont));
+    const auto style_sheet = QString::fromUtf8(R"CSS(
         QWidget { color: #eef1fb; font-size: 9.5pt; }
         QMainWindow, QDialog { background: #080d15; }
         QDialog#modalDialog { background: #0d1725; border: 1px solid #263852; border-radius: 9px; }
@@ -417,6 +468,126 @@ void apply_theme(QApplication& application) {
         QLabel#contradictsBadge { color: #ff7b85; background: #401a25; border: 1px solid #8b3340; border-radius: 4px; padding: 2px 5px; font-size: 6.8pt; }
         QLabel#addedTimestamp { color: #8795aa; font-size: 7.5pt; }
     )CSS");
+    application.setProperty("baseThemeStyleSheet", style_sheet);
+    apply_user_appearance(application);
+}
+
+QColor appearance_accent_color() {
+    const auto name = QSettings().value(QStringLiteral("appearance/accent"), QStringLiteral("Violet")).toString();
+    if (name == QStringLiteral("Blue")) return QColor("#4385ee");
+    if (name == QStringLiteral("Teal")) return QColor("#20a89b");
+    if (name == QStringLiteral("Amber")) return QColor("#d89220");
+    return QColor("#7545e4");
+}
+
+QColor appearance_accent_text_color() {
+    const auto accent = appearance_accent_color();
+    const auto linear = [](qreal channel) { return channel <= 0.04045 ? channel / 12.92 : std::pow((channel + 0.055) / 1.055, 2.4); };
+    const auto luminance = 0.2126 * linear(accent.redF()) + 0.7152 * linear(accent.greenF()) + 0.0722 * linear(accent.blueF());
+    const auto white_contrast = 1.05 / (luminance + 0.05);
+    const auto dark_contrast = (luminance + 0.05) / 0.05;
+    return dark_contrast > white_contrast ? QColor("#080d15") : QColor("#ffffff");
+}
+
+void apply_user_appearance(QApplication& application) {
+    QSettings settings;
+    const auto base_font = application.property("baseApplicationFont").value<QFont>();
+    auto font = base_font;
+    const auto family = settings.value(QStringLiteral("appearance/fontFamily")).toString();
+    if (!family.isEmpty()) font.setFamily(family);
+    const auto size_name = settings.value(QStringLiteral("appearance/textSize"), QStringLiteral("Standard")).toString();
+    const qreal scale = size_name == QStringLiteral("Small") ? 0.90 : size_name == QStringLiteral("Large") ? 1.15 : 1.0;
+    font.setPointSizeF(base_font.pointSizeF() * scale);
+    application.setFont(font);
+    auto palette = application.palette();
+    palette.setColor(QPalette::Highlight, appearance_accent_color());
+    application.setPalette(palette);
+
+    auto style_sheet = application.property("baseThemeStyleSheet").toString();
+    // Accent colors were previously applied only to a few controls. Recolor
+    // every purple/indigo token in the shared theme while keeping semantic
+    // status colors (green, red, amber and blue) intact.
+    const auto accent = appearance_accent_color();
+    QRegularExpression color_rule(QStringLiteral("#[0-9a-fA-F]{6}"));
+    struct ColorReplacement { qsizetype position; qsizetype length; QString value; };
+    std::vector<ColorReplacement> color_replacements;
+    auto color_matches = color_rule.globalMatch(style_sheet);
+    while (color_matches.hasNext()) {
+        const auto match = color_matches.next();
+        const QColor color(match.captured());
+        const auto hue = color.hue();
+        if (hue >= 235 && hue <= 300 && color.saturation() >= 35) {
+            auto recolored = color;
+            recolored.setHsv(accent.hue(), color.saturation(), color.value(), color.alpha());
+            color_replacements.push_back({match.capturedStart(), match.capturedLength(), recolored.name()});
+        }
+    }
+    for (auto it = color_replacements.crbegin(); it != color_replacements.crend(); ++it) {
+        style_sheet.replace(it->position, it->length, it->value);
+    }
+    QRegularExpression font_rule(QStringLiteral("font-size:\\s*([0-9.]+)pt"));
+    struct FontSizeReplacement { qsizetype position; qsizetype length; QString value; };
+    std::vector<FontSizeReplacement> replacements;
+    auto matches = font_rule.globalMatch(style_sheet);
+    while (matches.hasNext()) {
+        const auto match = matches.next();
+        bool ok = false;
+        const auto points = match.captured(1).toDouble(&ok);
+        if (ok) {
+            const auto scaled_points = size_name == QStringLiteral("Small") && points <= 8.0 ? points : points * scale;
+            replacements.push_back({match.capturedStart(1), match.capturedLength(1), QString::number(scaled_points, 'f', 1)});
+        }
+    }
+    for (auto it = replacements.crbegin(); it != replacements.crend(); ++it) {
+        style_sheet.replace(it->position, it->length, it->value);
+    }
+    const auto compact = settings.value(QStringLiteral("appearance/density"), QStringLiteral("Comfortable")).toString() == QStringLiteral("Compact");
+    const auto height = compact ? 28 : 36;
+    const auto padding = compact ? 4 : 7;
+    const auto accent_text = appearance_accent_text_color().name();
+    style_sheet += QStringLiteral("\nQPushButton[nav=\"true\"][navActive=\"true\"] { background:%4; border-left:2px solid %1; color:%2; }\nQPushButton[nav=\"true\"][caseTab=\"true\"][navActive=\"true\"] { background:transparent; border-left:0; border-bottom-color:%1; color:%2; }\nQTabBar::tab:selected { border-bottom-color:%1; color:%2; }\nQPushButton[filterActive=\"true\"] { border-color:%1; color:%2; }\nQPushButton[accent=\"true\"] { background:%1; border-color:%1; color:%5; }\nQPushButton[accent=\"true\"]:hover { background:%3; border-color:%2; }\nQPushButton[accent=\"true\"]:disabled { background:#10131e; border-color:%4; color:#8794aa; }\nQLineEdit:focus,QTextEdit:focus,QPlainTextEdit:focus,QComboBox:focus { border-color:%1; }\nQComboBox QAbstractItemView { selection-background-color:%4; }\nQTableWidget { selection-background-color:%4; }\nQPushButton { min-height:%6px; }\nQLineEdit,QTextEdit,QPlainTextEdit,QComboBox,QSpinBox { padding-top:%7px; padding-bottom:%7px; }")
+        .arg(accent.name(), accent.lighter(170).name(), accent.darker(120).name(), accent.darker(260).name(), accent_text).arg(height).arg(padding);
+    application.setStyleSheet(style_sheet);
+    for (auto* widget : QApplication::allWidgets()) {
+        const auto accent_surface_role = widget->property("accentSurfaceRole").toString();
+        if (accent_surface_role == QStringLiteral("notice")) {
+            widget->setStyleSheet(QStringLiteral("QLabel { color: %1; background: %2; border: 1px solid %3; border-radius: 8px; padding: 12px; }")
+                .arg(accent.lighter(170).name(), accent.darker(360).name(), accent.darker(230).name()));
+        } else if (accent_surface_role == QStringLiteral("drop")) {
+            widget->setStyleSheet(QStringLiteral("QLabel { color: %1; border: 1px dashed %2; border-radius: 8px; padding: 12px; }")
+                .arg(accent.lighter(170).name(), accent.name()));
+        }
+        if (auto* table = qobject_cast<QTableWidget*>(widget)) {
+            for (int row = 0; row < table->rowCount(); ++row) for (int column = 0; column < table->columnCount(); ++column) {
+                auto* item = table->item(row, column);
+                const auto kind = item ? item->data(Qt::UserRole + 173) : QVariant();
+                if (kind.isValid()) item->setIcon(ui_icon(static_cast<UiIcon>(kind.toInt()), accent.lighter(170)));
+            }
+        }
+        if (auto* combo = qobject_cast<QComboBox*>(widget)) {
+            for (int index = 0; index < combo->count(); ++index) {
+                const auto kind = combo->itemData(index, Qt::UserRole + 173);
+                if (kind.isValid()) combo->setItemIcon(index, ui_icon(static_cast<UiIcon>(kind.toInt()), accent.lighter(170)));
+            }
+        }
+        if (auto* tabs = qobject_cast<QTabWidget*>(widget)) {
+            refresh_accent_tab_icons(tabs);
+        }
+        if (!widget->property("accentIconKind").isValid()) continue;
+        const auto kind = static_cast<UiIcon>(widget->property("accentIconKind").toInt());
+        const auto color = widget->property("accentIconPrimary").toBool()
+            ? appearance_accent_text_color() : accent.lighter(170);
+        if (auto* push_button = qobject_cast<QPushButton*>(widget)) {
+            push_button->setIcon(ui_icon(kind, color));
+        } else if (auto* icon_label = qobject_cast<QLabel*>(widget)) {
+            const auto size = widget->property("accentIconSize").toSize();
+            if (size.isValid()) icon_label->setPixmap(ui_icon(kind, color).pixmap(size));
+            if (widget->property("accentSurface").toBool()) {
+                icon_label->setStyleSheet(QStringLiteral("QLabel { background: %1; border: 1px solid %2; border-radius: 9px; }")
+                    .arg(accent.darker(260).name(), accent.name()));
+            }
+        }
+    }
 }
 
 bool navigation_glow_enabled() {
@@ -508,10 +679,6 @@ int ExpandableText::contentHeightForWidth(int width) const {
 
 int ExpandableText::heightForWidth(int width) const { return contentHeightForWidth(width); }
 
-QString two_line_text_preview(const QString& value, const QFont& font, int available_width) {
-    return collapse_text_lines(value, font, std::max(1, available_width), 2);
-}
-
 void ExpandableText::refreshDisplay() {
     const auto width = this->width() > 0 ? this->width() : 320;
     QLabel::setText(expanded_ ? full_text_ : collapsedText(width));
@@ -594,6 +761,91 @@ QString enum_label(const std::string& value) {
     auto result = title_case(q(value));
     result.replace('_', ' ');
     return result;
+}
+
+QString human_readable_predicate(const QString& predicate) {
+    auto text = predicate.trimmed();
+    if (text.isEmpty()) return QStringLiteral("Related to");
+
+    const auto lower = text.toLower();
+    if (lower == QStringLiteral("related_to") || lower == QStringLiteral("related to")) return QStringLiteral("Related to");
+    if (lower == QStringLiteral("identifier_for") || lower == QStringLiteral("identifier for")) return QStringLiteral("Identifier for");
+    if (lower == QStringLiteral("works_at") || lower == QStringLiteral("works at") ||
+        lower == QStringLiteral("works_for") || lower == QStringLiteral("works for") ||
+        lower == QStringLiteral("employed_by") || lower == QStringLiteral("employed by")) return QStringLiteral("Employed by");
+    if (lower == QStringLiteral("owns") || lower == QStringLiteral("owns_domain") || lower == QStringLiteral("owner_of")) return QStringLiteral("Owns");
+    if (lower == QStringLiteral("owned_by")) return QStringLiteral("Owned by");
+    if (lower == QStringLiteral("member_of") || lower == QStringLiteral("member of")) return QStringLiteral("Member of");
+    if (lower == QStringLiteral("located_in") || lower == QStringLiteral("located in") ||
+        lower == QStringLiteral("located_at") || lower == QStringLiteral("located at")) return QStringLiteral("Located in");
+    if (lower == QStringLiteral("subsidiary_of") || lower == QStringLiteral("subsidiary of")) return QStringLiteral("Subsidiary of");
+    if (lower == QStringLiteral("parent_of") || lower == QStringLiteral("parent of")) return QStringLiteral("Parent of");
+    if (lower == QStringLiteral("child_of") || lower == QStringLiteral("child of")) return QStringLiteral("Child of");
+    if (lower == QStringLiteral("registered_to") || lower == QStringLiteral("registered to")) return QStringLiteral("Registered to");
+    if (lower == QStringLiteral("registered_by") || lower == QStringLiteral("registered by")) return QStringLiteral("Registered by");
+    if (lower == QStringLiteral("operates") || lower == QStringLiteral("operator_of")) return QStringLiteral("Operates");
+    if (lower == QStringLiteral("operated_by")) return QStringLiteral("Operated by");
+    if (lower == QStringLiteral("associated_with") || lower == QStringLiteral("associated with")) return QStringLiteral("Associated with");
+    if (lower == QStringLiteral("connected_to") || lower == QStringLiteral("connected to")) return QStringLiteral("Connected to");
+    if (lower == QStringLiteral("communicated_with") || lower == QStringLiteral("communicated with")) return QStringLiteral("Communicated with");
+    if (lower == QStringLiteral("founder_of") || lower == QStringLiteral("founded_by")) return QStringLiteral("Founder of");
+    if (lower == QStringLiteral("director_of")) return QStringLiteral("Director of");
+    if (lower == QStringLiteral("invested_in")) return QStringLiteral("Invested in");
+    if (lower == QStringLiteral("controls")) return QStringLiteral("Controls");
+    if (lower == QStringLiteral("controlled_by")) return QStringLiteral("Controlled by");
+    if (lower == QStringLiteral("alias_of")) return QStringLiteral("Alias of");
+    if (lower == QStringLiteral("resolves_to")) return QStringLiteral("Resolves to");
+    if (lower == QStringLiteral("hosted_on")) return QStringLiteral("Hosted on");
+    if (lower == QStringLiteral("uses_service") || lower == QStringLiteral("uses")) return QStringLiteral("Uses service");
+    if (lower == QStringLiteral("has_account")) return QStringLiteral("Has account");
+    if (lower == QStringLiteral("has_phone")) return QStringLiteral("Has phone");
+    if (lower == QStringLiteral("has_email")) return QStringLiteral("Has email");
+
+    text.replace(QLatin1Char('_'), QLatin1Char(' '));
+    text.replace(QLatin1Char('-'), QLatin1Char(' '));
+    const auto parts = text.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    QStringList result;
+    for (int i = 0; i < parts.size(); ++i) {
+        auto word = parts[i];
+        if (i > 0 && (word == QStringLiteral("to") || word == QStringLiteral("for") ||
+                      word == QStringLiteral("in") || word == QStringLiteral("at") ||
+                      word == QStringLiteral("of") || word == QStringLiteral("by") ||
+                      word == QStringLiteral("with") || word == QStringLiteral("on"))) {
+            result << word.toLower();
+        } else {
+            result << word.left(1).toUpper() + word.mid(1).toLower();
+        }
+    }
+    return result.join(QLatin1Char(' '));
+}
+
+UiIcon entity_icon(domain::EntityType type) {
+    switch (type) {
+    case domain::EntityType::Domain:
+    case domain::EntityType::Url: return UiIcon::Globe;
+    case domain::EntityType::Image: return UiIcon::Image;
+    case domain::EntityType::Document: return UiIcon::Document;
+    case domain::EntityType::Event: return UiIcon::Calendar;
+    case domain::EntityType::Person: return UiIcon::Person;
+    case domain::EntityType::Username:
+    case domain::EntityType::Account: return UiIcon::Entity;
+    case domain::EntityType::Email: return UiIcon::Email;
+    case domain::EntityType::Phone: return UiIcon::Phone;
+    case domain::EntityType::Ip: return UiIcon::Server;
+    case domain::EntityType::Company: return UiIcon::Organization;
+    case domain::EntityType::Place: return UiIcon::MapPin;
+    default: return UiIcon::Grid;
+    }
+}
+
+UiIcon evidence_icon(domain::EvidenceKind kind) {
+    if (kind == domain::EvidenceKind::Url) return UiIcon::Link;
+    if (kind == domain::EvidenceKind::Text) return UiIcon::Note;
+    return UiIcon::File;
+}
+
+QColor graph_entity_color() {
+    return appearance_accent_color().lighter(170);
 }
 
 QString wrap_long_tokens(const QString& value) {
@@ -715,27 +967,29 @@ QPushButton* button(const QString& text, bool accent) {
     auto* result = new QPushButton(normalized);
     const auto lower = normalized.toLower();
     std::optional<UiIcon> icon;
-    if (lower.startsWith(QStringLiteral("add ")) || lower.startsWith(QStringLiteral("new "))) icon = UiIcon::Add;
-    else if (lower.contains(QStringLiteral("evidence"))) icon = UiIcon::Evidence;
-    else if (lower.contains(QStringLiteral("source"))) icon = UiIcon::Source;
-    else if (lower.contains(QStringLiteral("claim")) || lower.contains(QStringLiteral("relation"))) icon = UiIcon::Claim;
-    else if (lower.contains(QStringLiteral("playbook")) || lower.contains(QStringLiteral("run"))) icon = UiIcon::Play;
+    if (lower.startsWith(QStringLiteral("add ")) || lower.startsWith(QStringLiteral("new ")) || lower.startsWith(QStringLiteral("create "))) icon = UiIcon::Add;
+    else if (lower.contains(QStringLiteral("delete")) || lower.contains(QStringLiteral("remove"))) icon = UiIcon::Trash;
+    else if (lower.contains(QStringLiteral("edit")) || lower.contains(QStringLiteral("update"))) icon = UiIcon::Edit;
+    else if (lower.contains(QStringLiteral("restore"))) icon = UiIcon::Restore;
+    else if (lower.contains(QStringLiteral("archive"))) icon = UiIcon::Archive;
+    else if (lower.contains(QStringLiteral("move")) && lower.contains(QStringLiteral("up"))) icon = UiIcon::ArrowUp;
+    else if (lower.contains(QStringLiteral("move"))) icon = UiIcon::ArrowDown;
     else if (lower.contains(QStringLiteral("export"))) icon = UiIcon::Export;
     else if (lower.contains(QStringLiteral("import")) || lower.contains(QStringLiteral("upload"))) icon = UiIcon::Upload;
     else if (lower.contains(QStringLiteral("preview"))) icon = UiIcon::Eye;
     else if (lower.contains(QStringLiteral("verify"))) icon = UiIcon::Check;
-    else if (lower.contains(QStringLiteral("delete")) || lower.contains(QStringLiteral("remove"))) icon = UiIcon::Trash;
-    else if (lower.contains(QStringLiteral("archive"))) icon = UiIcon::Archive;
-    else if (lower.contains(QStringLiteral("restore"))) icon = UiIcon::Restore;
-    else if (lower.contains(QStringLiteral("edit")) || lower.contains(QStringLiteral("update"))) icon = UiIcon::Edit;
     else if (lower.contains(QStringLiteral("open")) || lower.contains(QStringLiteral("browse")) || lower.contains(QStringLiteral("change"))) icon = UiIcon::FolderOpen;
     else if (lower.contains(QStringLiteral("link"))) icon = UiIcon::Link;
-    else if (lower.contains(QStringLiteral("move")) && lower.contains(QStringLiteral("up"))) icon = UiIcon::ArrowUp;
-    else if (lower.contains(QStringLiteral("move"))) icon = UiIcon::ArrowDown;
+    else if (lower.contains(QStringLiteral("claim")) || lower.contains(QStringLiteral("relation"))) icon = UiIcon::Claim;
+    else if (lower.contains(QStringLiteral("evidence"))) icon = UiIcon::Evidence;
+    else if (lower.contains(QStringLiteral("source"))) icon = UiIcon::Source;
+    else if (lower.contains(QStringLiteral("playbook")) || lower.contains(QStringLiteral("run"))) icon = UiIcon::Play;
     else if (lower.contains(QStringLiteral("add")) || lower.contains(QStringLiteral("new")) || lower.contains(QStringLiteral("create"))) icon = UiIcon::Add;
     if (icon) {
-        result->setIcon(ui_icon(*icon, accent ? QColor("#ffffff") : QColor("#bba6ff")));
+        result->setIcon(ui_icon(*icon, accent ? appearance_accent_text_color() : appearance_accent_color().lighter(170)));
         result->setIconSize(QSize(18, 18));
+        result->setProperty("accentIconKind", static_cast<int>(*icon));
+        result->setProperty("accentIconPrimary", accent);
     }
     if (accent) result->setProperty("accent", true);
     return result;
@@ -847,6 +1101,55 @@ void show_error(QWidget* parent, const QString& message) {
 QString shorten_id(const std::string& id) {
     const auto value = q(id);
     return value.size() > 8 ? value.left(8) : value;
+}
+
+QDialogButtonBox* dialog_buttons(QDialog& dialog) {
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    if (auto* accept = buttons->button(QDialogButtonBox::Ok)) {
+        accept->setText(QStringLiteral("Save"));
+        accept->setProperty("accent", true);
+        accept->setProperty("accentIconKind", static_cast<int>(UiIcon::Check));
+        accept->setProperty("accentIconPrimary", true);
+        accept->setIcon(ui_icon(UiIcon::Check, appearance_accent_text_color()));
+        accept->setIconSize(QSize(17, 17));
+    }
+    if (auto* cancel = buttons->button(QDialogButtonBox::Cancel)) cancel->setText(QStringLiteral("Cancel"));
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    return buttons;
+}
+
+void set_primary_action(QDialogButtonBox* buttons, const QString& text) {
+    if (buttons == nullptr) return;
+    if (auto* accept = buttons->button(QDialogButtonBox::Ok)) accept->setText(text);
+}
+
+QString join_values(const std::vector<std::string>& values) {
+    QStringList result;
+    for (const auto& value : values) result.push_back(q(value));
+    return result.join(QStringLiteral(", "));
+}
+
+QString join_values(const std::vector<QString>& values) {
+    return values.empty() ? QString() : QStringList(values.begin(), values.end()).join(QStringLiteral(", "));
+}
+
+std::vector<std::string> split_values(const QString& value) {
+    std::vector<std::string> result;
+    for (const auto& item : value.split(',', Qt::SkipEmptyParts)) {
+        const auto trimmed = item.trimmed();
+        if (!trimmed.isEmpty()) result.push_back(s(trimmed));
+    }
+    return result;
+}
+
+void clear_layout(QLayout* layout) {
+    if (!layout) return;
+    while (auto* item = layout->takeAt(0)) {
+        if (auto* child = item->layout()) clear_layout(child);
+        if (auto* widget = item->widget()) delete widget;
+        delete item;
+    }
 }
 
 } // namespace evidence_trace::gui
