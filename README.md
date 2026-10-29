@@ -1,94 +1,140 @@
-# Evidence Trace
+<p align="center">
+  <img src="docs/image/Neon%20Hexagonal%20Cube%20Network.png" alt="Evidence Trace purple evidence network logo" width="160" />
+</p>
+
+<h1 align="center">Evidence Trace</h1>
+
+<p align="center">
+  <strong>Follow the evidence. Keep the reasoning.</strong><br />
+  A local-first OSINT investigation workbench for Linux.
+</p>
+
+<p align="center">
+  <strong>Linux desktop</strong> &nbsp;·&nbsp; Qt 6 + C++20 &nbsp;·&nbsp; SQLite &nbsp;·&nbsp; GUI + CLI
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> &nbsp;·&nbsp;
+  <a href="#inside-the-workbench">Screenshots</a> &nbsp;·&nbsp;
+  <a href="#what-you-can-do">Features</a> &nbsp;·&nbsp;
+  <a href="#documentation">Documentation</a>
+</p>
 
 Status: Approved
 
-**Evidence Trace is a local-first OSINT investigation workbench.** Build a case,
-preserve what you find, connect evidence to claims, and return later with a
-clear record of how you reached each assessment.
+---
 
-It runs on Linux as a Qt 6 desktop app with a companion CLI. Case records and
-preserved files are stored in a local workspace. Evidence Trace makes no
-background network requests or telemetry calls; links and commands that you
-choose to open or run can use the network under your account and permissions.
+Build a case, preserve what you find, and connect evidence to claims. Return
+months later with a clear record of **what you assessed, what supports it,
+and how you got there**.
 
-## Screenshots
+Case records and preserved files stay in a local workspace. Evidence Trace
+makes no background network requests or telemetry calls. Links and commands
+you choose to open or run can use the network with your account's permissions.
+
+## Inside the workbench
+
+### See the connections
+
+Explore recorded entities and relationships on the investigation graph.
 
 <p align="center">
   <img src="docs/image/readme-graph.png" alt="Investigation graph connecting fictional entities with assessed relationships" width="100%" />
 </p>
 
-<p align="center">
-  <img src="docs/image/readme-cases.png" alt="Case library with a selected fictional investigation" width="49%" />
-  <img src="docs/image/readme-tools.png" alt="Saved tools library with a selected example command" width="49%" />
-</p>
+<table>
+  <tr>
+    <th width="50%">Keep cases organized</th>
+    <th width="50%">Bring your own tools</th>
+  </tr>
+  <tr>
+    <td><img src="docs/image/readme-cases.png" alt="Case library with a selected fictional investigation" width="100%" /></td>
+    <td><img src="docs/image/readme-tools.png" alt="Saved tools library with a selected example command" width="100%" /></td>
+  </tr>
+</table>
+
+<details>
+<summary><strong>Look closer: preserved evidence and claim assessments</strong></summary>
 
 <p align="center">
   <img src="docs/image/readme-evidence.png" alt="Preserved excerpt with source details and linked claim assessments" width="100%" />
 </p>
 
-## Follow the evidence
+</details>
 
-- **Organize a case:** track entities, sources, claims, relations, notes, and
-  investigation activity together.
-- **Preserve material:** import files into local storage, record quotations, or
-  save a URL. Imported files are checked with SHA-256.
-- **Explain assessments:** attach evidence as support, contradiction, or
-  context; keep reasoning and status history with the claim.
-- **See relationships:** explore recorded entity and claim relationships on a
-  case map. The map visualizes records; it does not generate inferences.
-- **Use your tools:** save command and link tools, launch commands in the
-  integrated terminal after reviewing a confirmation, and run interactive
-  shell sessions. Commands run with your operating-system permissions.
-- **Resume or share a case:** use playbook runs, portable case ZIP archives
-  with import validation, and an English Markdown report.
+## What you can do
+
+Implementation status: **Implemented** for the capabilities below.
+
+| Capability | In the workbench |
+| --- | --- |
+| **Organize investigations** | Keep entities, sources, claims, relations, notes, and activity together in a case. |
+| **Preserve material** | Import files into local storage, record quotations, and save URLs. Check stored files with SHA-256. |
+| **Explain assessments** | Link supporting, contradicting, or contextual evidence to claims; retain reasoning and status history. |
+| **Explore relationships** | Navigate recorded entity and claim relationships on a case map. The map visualizes records without generating inferences. |
+| **Use your tools** | Save command and link tools, confirm saved commands before launch, and work in an integrated interactive terminal. |
+| **Resume and share** | Follow playbook runs, export portable case ZIPs, validate imports, and produce English Markdown reports. |
 
 ## Quick start
 
-The supported source installation path is Linux. On Debian or Ubuntu, install
-the build dependencies:
+The supported source installation path is **Linux**. The desktop app uses
+Qt 6; a companion CLI supports command-line workflows.
+
+### 1. Install dependencies
+
+On Debian or Ubuntu:
 
 ```sh
 sudo apt update
 sudo apt install build-essential cmake qt6-base-dev libsqlite3-dev libssl-dev libzip-dev libvterm-dev
 ```
 
-Download and extract the repository, or clone it with Git. From the project
-directory, run:
+### 2. Build and install
+
+Download and extract the repository, or clone it with Git. Run this from the
+project directory:
 
 ```sh
 ./install.sh
 ```
 
-This builds the Release version and installs the GUI and CLI into
-`~/.local/bin` by default. Add that directory to `PATH` if needed, then launch
-the app:
+The script builds a Release version and installs the GUI and CLI into
+`~/.local/bin` by default. Add that directory to `PATH` if needed.
+
+### 3. Open the workbench
+
+Launch the desktop app:
 
 ```sh
 evidence-trace-gui
 ```
 
-For command-line workflows, start with:
+Explore the CLI:
 
 ```sh
 evidence-trace --help
 ```
 
 See the [build and installation guide](docs/development/build.md) for
-prerequisites, CMake instructions, and install options, and the
+prerequisites, CMake instructions, and install options, or the
 [CLI guide](docs/user/cli.md) for commands and examples.
 
-## Data and limitations
+## Your data and your tools
 
-The database, saved tools, and copied attachments are stored in a local data
-directory. The application does not encrypt this data. Export case ZIPs
-regularly and verify a backup by importing it into a separate workspace.
-SHA-256 detects changes to a stored file; it does not prove who created the
-file or protect the database from someone with local access.
+**Storage and backups.** The database, saved tools, and copied attachments
+live in a local data directory. The application does not encrypt this data.
+Export case ZIPs regularly and verify a backup by importing it into a
+separate workspace.
 
-Saved links open in your system browser. Saved commands and interactive
-terminal commands can access local files and the network with your user
-permissions; saved commands require confirmation, while terminal commands are
-entered directly by you. Evidence Trace does not sandbox or filter them.
+**File integrity.** SHA-256 detects changes to a stored file. It does not prove
+who created the file or protect the database from someone with local access.
+
+**Command execution.** Saved links open in your system browser. Saved commands
+require confirmation; interactive terminal commands are entered directly by
+you. Both run with your operating-system permissions and can access local
+files and the network. Evidence Trace does not sandbox or filter them.
+
+### Current limitations
 
 The app does not automatically collect web pages or query external OSINT
 services. It has no cloud sync, multi-user accounts, PDF report, or full-text
@@ -96,12 +142,13 @@ indexing of PDFs and images. Review the
 [current behavior and limitations](docs/spec/evidence-trace-spec.md) before
 using it for an investigation workflow.
 
-## Project links
+## Documentation
 
-- [Product specification and data-use policy](docs/spec/evidence-trace-spec.md)
-- [Architecture](docs/development/architecture.md)
-- [CLI usage](docs/user/cli.md)
-- [Build and installation](docs/development/build.md)
-- [Test guide](docs/development/tests.md)
-- [Acceptance matrix](docs/spec/acceptance.md)
-- [GUI design references](docs/design/gui/README.md)
+| Start here | Reference |
+| --- | --- |
+| **Install and launch** | [Build and installation](docs/development/build.md) |
+| **Work from the terminal** | [CLI usage](docs/user/cli.md) |
+| **Understand intended behavior** | [Product specification and data-use policy](docs/spec/evidence-trace-spec.md) |
+| **Explore the codebase** | [Architecture](docs/development/architecture.md) |
+| **Verify behavior** | [Test guide](docs/development/tests.md) · [Acceptance matrix](docs/spec/acceptance.md) |
+| **Explore the interface design** | [GUI design references](docs/design/gui/README.md) |
