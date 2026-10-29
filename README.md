@@ -14,12 +14,16 @@ choose to open or run can use the network under your account and permissions.
 ## Screenshots
 
 <p align="center">
-  <img src="docs/image/image_cases.png" alt="Evidence Trace case list and case overview" width="100%" />
+  <img src="docs/image/readme-graph.png" alt="Investigation graph connecting fictional entities with assessed relationships" width="100%" />
 </p>
 
 <p align="center">
-  <img src="docs/image/image_entities.png" alt="Evidence Trace entity records and details" width="49%" />
-  <img src="docs/image/imange_claims.png" alt="Evidence Trace claims and relationship map" width="49%" />
+  <img src="docs/image/readme-cases.png" alt="Case library with a selected fictional investigation" width="49%" />
+  <img src="docs/image/readme-tools.png" alt="Saved tools library with a selected example command" width="49%" />
+</p>
+
+<p align="center">
+  <img src="docs/image/readme-evidence.png" alt="Preserved excerpt with source details and linked claim assessments" width="100%" />
 </p>
 
 ## Follow the evidence
