@@ -2,7 +2,7 @@
 
 Status: Approved
 
-Evidence Trace keeps each investigation and its files on this device. Network access is disabled.
+Evidence Trace stores investigations and preserved files in a local workspace and makes no background network requests or telemetry calls. Links opened in the browser and commands run through Tools or Terminal may access the network under your account and operating-system permissions.
 
 ## Create a case
 
@@ -25,6 +25,23 @@ Use **Entities** for the specialized entity list and details; use the graph to f
 Claims and relations default to **Observation** and can be saved unverified without reasoning. Choose **Inference** when drawing a conclusion; it requires written reasoning. For a relation, choose the subject and object and enter a predicate; the statement is suggested automatically and can be edited.
 
 The case header and activity views update after logged changes. The Runs and Export tabs reload their summaries when opened so they include changes made elsewhere in the case.
+
+## Use your tools and the terminal
+
+Open **Tools** to build your own collection of investigation utilities. Tools are shared across all cases and stay saved in the workspace.
+
+Choose **Add tool** to save either kind:
+
+- A **command** tool runs an executable. Enter the executable and its arguments, and the command runs without shell interpretation; arguments are split on spaces and quoted values keep their spaces. If you need pipes, substitution, or other shell features, select **Shell command** instead and enter one command line, which then runs via `/bin/sh -c`. A command tool can also set a working directory.
+- A **link** tool stores a URL, including the scheme, for example `https://example.com`. Links open in your default browser.
+
+Both kinds accept an optional description, category, and tags. Use the search box and the category and type dropdowns to find tools as the collection grows. Double-click a command tool to run it or a link tool to open it; **Edit** and **Delete** manage the selected tool.
+
+Running a saved command always shows a confirmation first, with the exact command line, the execution mode, and the working directory. Nothing runs until you choose **Run in terminal**.
+
+Open **Terminal** for command-line work. **New shell tab** starts your shell in the selected working directory, which is remembered for the next launch. The terminal behaves like a standalone terminal: colors and control sequences work, output can be scrolled back with the mouse wheel or **Shift+PageUp** and **Shift+PageDown** (**Shift+End** jumps to the bottom), interactive programs receive your input, and **Ctrl+Shift+C** and **Ctrl+Shift+V** copy and paste. Each tab shows its process state: running, stopping, exited with its code, or stopped by user. **Stop process** terminates the running session, and closing a tab with a running process asks for confirmation. Commands that fail show their own errors in the terminal; the tab's status strip reports the final exit code.
+
+No command or tool runs automatically when the application opens. Closing the application ends its terminal sessions.
 
 ## Change appearance and storage
 

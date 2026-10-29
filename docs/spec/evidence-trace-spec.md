@@ -2,9 +2,9 @@
 
 Status: Approved
 
-**Document version:** 1.5 · **Date:** 2026-10-16 · **Primary product language:** English · **Localization:** Ukrainian deferred; frozen in the current documentation phase
+**Document version:** 1.6 · **Date:** 2026-10-29 · **Primary product language:** English · **Localization:** Ukrainian deferred; frozen in the current documentation phase
 
-> **Verification baseline:** Core workflows were previously verified on 2026-10-08. On 2026-10-16, schema v4 adds managed image references, graph entity and relationship creation, Person identifier capture, and source/text evidence options. The case opens on the interactive graph workspace. Graph position/zoom persistence and direction/predicate changes are implemented; CMake build, CTest, and offscreen case-open captures passed. Native mouse-driven graph journeys remain unverified in this environment. Dedicated timeline and advanced graph layout tooling remain extensions.
+> **Verification baseline:** Core workflows were previously verified on 2026-10-08. On 2026-10-16, schema v4 adds managed image references, graph entity and relationship creation, Person identifier capture, and source/text evidence options. The case opens on the interactive graph workspace. Graph position/zoom persistence and direction/predicate changes are implemented; CMake build, CTest, and offscreen case-open captures passed. Native mouse-driven graph journeys remained unverified in that environment. On 2026-10-25, the Tools hub and integrated terminal were covered by build, CTest, and GUI acceptance runs; migration 4-to-5 was also exercised on a database copy. Dedicated timeline and built-in OSINT integrations remain extensions.
 
 ## Contents
 
@@ -16,7 +16,7 @@ Status: Approved
 6. [User interface](#6-user-interface)
 7. [Data model](#7-data-model)
 8. [Architecture and storage](#8-architecture-and-storage)
-9. [Security and privacy](#9-security-and-privacy)
+9. [Security, privacy, and use policy](#9-security-privacy-and-use-policy)
 10. [Acceptance criteria](#10-acceptance-criteria)
 11. [Implementation plan](#11-implementation-plan)
 12. [Open decisions](#12-open-decisions)
@@ -81,7 +81,7 @@ Implementation status: Implemented for the core MVP scope; Planned for the later
 | Playbooks | Templates, techniques, and case-specific runs | Suggested next steps. |
 | Activity log | Automatic events and manual “how I found it” entries | Extended import/export audit. |
 | Export and recovery | Case archive and reimport; text report | PDF report, selective export. |
-| Tools | Open external URLs manually | RDAP/DNS, metadata, username, image, and supported PimEyes integration. |
+| Tools and terminal | Save user-defined command and link tools; run commands only after confirmation; use tabbed local shell sessions | Built-in RDAP/DNS, metadata, username, image, and supported PimEyes integrations. |
 | Timeline | Event dates in records | Dedicated timeline view. |
 | Language | English UI and documentation | Ukrainian localization. |
 
@@ -291,7 +291,7 @@ erDiagram
 
 Store timestamps in ISO 8601 UTC; the current desktop UI and Markdown report use the explicit convention `YYYY-MM-DD HH:MM UTC` (the underlying values retain ISO-8601 precision). Store `event_time` (when the described event occurred) separately from `captured_at` (when evidence was obtained) and `imported_at` (when it entered the application). If the precise time is unknown, store a date/range and precision indicator; do not invent `00:00`.
 
-The case format includes `schema_version`. Database migrations are sequential and tested against a copy; opening an unknown newer version must not modify files. Create a backup before migration. Schema v4 adds JSON path references for entity and evidence images; v1–v3 records migrate with empty image lists. Case archive import/export includes the referenced image bytes and remaps their managed paths on import.
+The case format includes `schema_version`. Database migrations are sequential and tested against a copy; opening an unknown newer version must not modify files. Create a backup before migration. Schema v4 adds JSON path references for entity and evidence images; v1–v3 records migrate with empty image lists. Database schema v5 adds workspace-global saved tools. Case archive import/export includes the referenced image bytes and remaps their managed paths on import; global tools are not part of a case archive.
 
 ## 8. Architecture and storage
 
@@ -307,7 +307,7 @@ flowchart TD
     IMPORT --> STORE
 ```
 
-**Implemented storage layout:** one SQLite database for metadata and templates, with attachments in an application-managed directory named by opaque IDs rather than user-supplied filenames. The data directory is configurable. Back up the database and attachments as a unit, preferably through the built-in export. A relative path from the database must always resolve inside the designated attachment directory. The MVP does not require network access.
+**Implemented storage layout:** one SQLite database for case metadata, global playbook templates, and workspace-global saved tools, with attachments in an application-managed directory named by opaque IDs rather than user-supplied filenames. The data directory is configurable. Back up the database and attachments as a unit, preferably through the built-in export. A relative path from the database must always resolve inside the designated attachment directory. The core case-management workflows do not require network access; user-configured tools, terminal commands, and links can access external networks when the user chooses to run or open them.
 
 **Transactional behavior:** copy an imported file to a temporary location and compute its hash, record metadata in a database transaction, then atomically move the file to its final location. A failed operation cleans up temporary files. On startup, the application detects orphaned temporary files and offers safe cleanup. This specifies the intended recovery behavior; SQLite and the filesystem do not form one atomic transaction.
 
@@ -315,16 +315,28 @@ flowchart TD
 
 **Future modules:** each module receives typed input, identifies the external service and the type and time of its request, and returns candidate results with raw provenance. The user decides what enters the case. A module cannot set `confirmed` automatically. A feature module may add RDAP/DNS results; an image module may extract metadata or open a manual search link. PimEyes results may be entered manually or integrated through an officially available, permitted route, without bypassing service restrictions. Review third-party APIs, pricing, and terms before implementing each integration.
 
-## 9. Security and privacy
+## 9. Security, privacy, and use policy
 
-Implementation status: Partial. Core behavior is Implemented; limitations and Planned requirements are listed in the implementation-status record below. Normative requirements are retained and do not become implemented merely because they appear here.
+Implementation status: Partial. Local case storage and safe archive handling are Implemented. Encryption is outside the current scope; built-in network-service integrations are Planned. The application does not sandbox user-launched commands, enforce an investigation purpose, or restrict what a user runs in the terminal.
 
-- OSINT cases may contain personal data. By default, everything is stored locally, with **no background requests or telemetry** in the MVP. Opening an external URL or using a future module explicitly shows what will be sent outside the application.
-- Restrict data-directory permissions to the current user. The MVP does not claim to encrypt storage; full-disk encryption is needed to protect a lost device. Application-level encryption is a separate future requirement.
-- Archives, reports, and screenshots may contain sensitive material. Show the data included before export. The MVP has no automatic anonymization; review a report manually before sharing it.
-- Import must not execute embedded scripts, open URLs automatically, or write files outside the import destination. Limits on file count, file size, and total uncompressed size prevent uncontrolled disk use.
-- SHA-256 detects a file change **relative to the stored hash**. By itself, it does not prove that the content was authentic when captured or that a local database was not altered. Strict chain-of-custody requirements need separate signing, time attestation, and procedural controls.
-- The user defines a legitimate investigation purpose and scope. The application does not include covert surveillance, mass collection of personal information, or automatic circumvention of service protections.
+### Data handling
+
+- Case records, saved tools, and preserved files are stored in the configured local workspace. The application makes no background network requests and sends no telemetry.
+- The user can choose actions that leave the application: opening a saved link launches the system browser; a saved command runs only after the user reviews its confirmation; and the integrated terminal accepts commands entered by the user. These actions may contact network services or transmit data under the user's account and operating-system permissions. Evidence Trace does not inspect or filter that traffic.
+- The application does not encrypt the database, attachments, saved tools, or exported archives. Protect the device and workspace with operating-system account controls and full-disk encryption. Anyone with access to an unlocked account or copied workspace may be able to read its contents.
+- Case exports, Markdown reports, screenshots, and copied terminal output can contain sensitive information. Review their contents and destination before sharing. The application does not automatically anonymize exports.
+- A terminal working directory is remembered in user-level settings. Terminal sessions and their output are not persisted as case records; closing the application ends the sessions.
+
+### Execution and import boundaries
+
+- Imported case archives are validated before records are created. The importer rejects unsafe paths and invalid attachments; it does not execute archive contents or open embedded URLs automatically.
+- Saved command tools can run either a configured executable with arguments and no shell interpretation, or an explicit `/bin/sh -c` command. Both run with the current user's operating-system permissions and are not sandboxed. The run dialog displays the command and working directory, and execution requires confirmation.
+- The integrated terminal is an interactive shell with the same local-user privileges. It can read, modify, or delete files available to that user, launch other programs, and access the network. Users are responsible for commands and tools they enter or save.
+- SHA-256 detects whether a preserved file differs from its stored hash. It does not prove the file's origin, capture time, or authenticity, and it does not protect a database from modification by someone with local access. Strict chain-of-custody requirements need separate signing, time attestation, and procedural controls.
+
+### Investigation use
+
+The user is responsible for defining a lawful purpose and scope and for following applicable law, service terms, and organizational rules. Evidence Trace records and organizes user-entered material; it does not determine whether collection is lawful, verify that records are true, or enforce a prohibition on covert surveillance, mass collection, or circumvention of service protections. It does not automatically identify people or set a claim to `confirmed`.
 
 ## 10. Acceptance criteria
 
@@ -361,7 +373,7 @@ Implementation status: Implemented for core stages 1–5, subject to the limitat
 3. **Work context:** activity log, notes, search, statuses, and reasoning. Delivers AC-07 and AC-11.
 4. **Methodology:** techniques, playbooks, and run snapshots. Delivers AC-08.
 5. **Portability:** ZIP export, validation and import, and Markdown report. Delivers AC-09–AC-10. Then run the complete MVP acceptance suite.
-6. **Extensions:** graph, timeline, RDAP/DNS, metadata, username search, and controlled image-search integrations. Specify and test each separately.
+6. **Extensions:** the focused relationship graph, workspace-global command/link tools, and integrated terminal are implemented. Dedicated timeline views, richer graph analysis, and built-in RDAP/DNS, metadata, username, or image-search integrations remain extensions; specify and test each separately.
 
 The implementation baseline has been split into `README.md` (purpose and actual startup instructions), `docs/user/` (task-oriented usage), `docs/spec/` (rules, data, acceptance criteria), `docs/development/` (build, architecture, migrations, tests), and `CHANGELOG.md`. Installation and build commands in the README are kept only after the Qt/SQLite stack was implemented and verified.
 
@@ -377,9 +389,9 @@ The implementation baseline has been split into `README.md` (purpose and actual 
 | Web capture and PimEyes | Outside MVP; verify technical, legal, and service conditions. | Before implementing an integration. |
 | Ukrainian localization | Planned: future localization; English remains maintained and mb_remeber is frozen under the approved documentation policy. | Only after explicit owner direction. |
 
-## Implementation-status record — 2026-10-01
+## Implementation-status record — 2026-10-29
 
-This revision preserves intended requirements and records present gaps; it does not approve code changes. The [documentation policy](../policy/project_documentation_policy.md) governs maintenance; the [module registry](../internal_spec/modules_registry.md) maps code ownership.
+This revision records current implementation evidence and intended gaps. Approved by the project owner on 2026-10-29. The [documentation policy](../policy/project_documentation_policy.md) governs maintenance; the [module registry](../internal_spec/modules_registry.md) maps code ownership.
 
 | Area | Status | Current evidence and remaining requirement |
 | --- | --- | --- |
@@ -393,6 +405,8 @@ This revision preserves intended requirements and records present gaps; it does 
 | Investigation graph | Implemented | Graph displays all entities, including isolated nodes; graph controls create entities and directional relations. Relations remain claims with evidence roles and manual statuses. Native interaction remains unverified in the 2026-10-16 environment. |
 | Person identifiers and clipboard images | Partial | Person create form exposes multiple identifier values and managed image attachments; identifiers are first-class typed entities linked by unverified relations. Clipboard capture controls and persistence paths are implemented; native clipboard/dialog interaction remains unverified. |
 | Evidence without files | Implemented | Existing URL/text/file evidence types are accepted as relation support. Graph relation entry can add a URL, text observation, or local file. Multiple evidence links can be added from the relation inspector. |
+| Saved tools and integrated terminal | Implemented | Workspace-global command and link tools persist in the database; saved commands require confirmation and run in a PTY-backed terminal. Direct command mode avoids shell interpretation; explicit shell mode uses `/bin/sh -c`. User-entered terminal commands are unrestricted by the application. See [tools behavior](../internal_spec/tools/behavior.md) and [technical notes](../internal_spec/tools/tech_notes.md). |
+| Automatic network access and telemetry | Implemented | The application makes no background requests or telemetry calls. User-opened links and commands run from saved tools or the integrated terminal may access the network outside application control. |
 | Dedicated timeline, advanced graph tooling, integrations, PDF reports, encryption, localization | Planned | These remain extensions; Ukrainian reference maintenance is frozen. |
 | Quality target in section 10 | Planned | No measured benchmark is claimed. |
 
